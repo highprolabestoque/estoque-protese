@@ -325,7 +325,8 @@ const VALIDADES = [
 ];
 const STOCKS = [
   {id:'laboratorio', nome:'Laboratório HighPro', subtitulo:'Laboratório de Prótese', icon:'ti-tooth'},
-  {id:'curso', nome:'Curso HighPro', subtitulo:'Estoque do curso', icon:'ti-school'}
+  {id:'curso', nome:'Curso Prótese HighPro', subtitulo:'Estoque do curso de prótese', icon:'ti-school'},
+  {id:'curso-implante', nome:'Curso Implante HighPro', subtitulo:'Estoque do curso de implante', icon:'ti-school'}
 ];
 const LEGACY_STORAGE_KEY = 'estoque_proto_v1';
 const CURRENT_STOCK_KEY = 'estoque_proto_current_stock';
@@ -361,7 +362,7 @@ function createEmptyState() {
 }
 
 function defaultStateFor(stockId) {
-  return stockId === 'curso' ? createEmptyState() : createLaboratorioState();
+  return stockId === 'laboratorio' ? createLaboratorioState() : createEmptyState();
 }
 
 function stockKey(stockId) {
