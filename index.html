@@ -91,7 +91,7 @@
   th { text-align: left; font-size: 11px; font-weight: 500; color: var(--text2); padding: 8px; border-bottom: 0.5px solid var(--border); text-transform: uppercase; letter-spacing: .04em; }
   td { padding: 10px 8px; border-bottom: 0.5px solid var(--border); vertical-align: middle; }
   tr:last-child td { border-bottom: none; }
-  .panel-table { padding: 0; overflow: hidden; }
+  .panel-table { padding: 0; overflow-x: auto; overflow-y: hidden; }
   .panel-table table th:first-child, .panel-table table td:first-child { padding-left: 1.25rem; }
   .panel-table table th:last-child, .panel-table table td:last-child { padding-right: 1.25rem; }
 
@@ -101,6 +101,23 @@
   .badge.empty { background: var(--danger-bg); color: var(--danger-text); }
 
   .chip { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 11px; background: var(--bg2); color: var(--text2); margin: 2px; border: 0.5px solid var(--border); }
+  .chip.validity-short { background: var(--danger-bg); color: var(--danger-text); border-color: var(--danger-border); }
+  .chip.validity-medium { background: var(--warn-bg); color: var(--warn-text); border-color: var(--warn-border); }
+  .chip.validity-long { background: var(--success-bg); color: var(--success-text); border-color: var(--success-border); }
+
+  .material-name-btn { border: 0; padding: 0; background: none; color: var(--text); font: inherit; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; text-align: left; }
+  .material-name-btn:hover { text-decoration: underline; }
+  .material-name-btn i { color: var(--text2); font-size: 14px; }
+  .cost-stack { display: grid; gap: 2px; color: var(--text2); font-size: 12px; min-width: 112px; }
+  .cost-stack strong { color: var(--text); font-weight: 500; }
+  .photo-preview { min-height: 118px; border: 0.5px dashed var(--border2); border-radius: var(--radius); background: var(--bg2); display: flex; align-items: center; justify-content: center; overflow: hidden; color: var(--text2); font-size: 12px; }
+  .photo-preview img { width: 100%; max-height: 180px; object-fit: contain; display: block; }
+  .photo-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 8px; }
+  .photo-actions input[type=file] { font-size: 12px; max-width: 100%; }
+  .photo-viewer { display: grid; gap: 14px; }
+  .photo-viewer-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .photo-viewer-head h3 { margin: 0; }
+  .photo-viewer img { width: 100%; max-height: 70vh; object-fit: contain; border-radius: var(--radius); background: var(--bg2); border: 0.5px solid var(--border); }
 
   .btn { padding: 8px 14px; border: 0.5px solid var(--border2); border-radius: var(--radius); cursor: pointer; font-size: 13px; background: transparent; color: var(--text); font-family: inherit; transition: background .15s; display: inline-flex; align-items: center; gap: 6px; }
   .btn:hover { background: var(--bg2); }
@@ -136,6 +153,7 @@
   .overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 100; align-items: center; justify-content: center; padding: 1rem; cursor: default; }
   .overlay.open { display: flex; }
   .modal { background: var(--bg); border-radius: var(--radius-lg); border: 0.5px solid var(--border); padding: 1.5rem; width: min(540px, 100%); max-height: 90vh; overflow-y: auto; }
+  .modal.wide { width: min(760px, 100%); }
   .modal h3 { font-size: 15px; font-weight: 500; margin-bottom: 1.25rem; }
   .btn-row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 1.25rem; }
 
@@ -212,7 +230,7 @@
         <h2>Materiais</h2>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
           <input type="text" placeholder="Buscar..." style="width:200px" oninput="renderMateriais(this.value)" id="search-mat">
-          <button class="btn primary" onclick="openModalMaterial()"><i class="ti ti-plus"></i> Novo material</button>
+          <button class="btn primary" type="button" data-action="new-material"><i class="ti ti-plus"></i> Novo material</button>
         </div>
       </div>
       <div class="panel panel-table">
@@ -222,6 +240,7 @@
             <th>Categoria</th>
             <th>Em estoque</th>
             <th>Mínimo</th>
+            <th>Custo / Validade</th>
             <th>Fornecedor</th>
             <th>Status</th>
             <th></th>
@@ -288,6 +307,11 @@
 <script>
 const CATS = ['Bloco cerâmica','Bloco zircônia','Bloco PMMA','Disco CAD/CAM','Cimento','Resina','Cerâmica feldspática','Acessório','Outros'];
 const TIPOS = ['Coroa unitária','Pontes','Inlay / Onlay','Faceta','Prótese sobre implante','Prótese parcial removível','Prótese total','Provisório'];
+const VALIDADES = [
+  {value:'curta', label:'Curta'},
+  {value:'media', label:'Média'},
+  {value:'longa', label:'Longa'}
+];
 const STOCKS = [
   {id:'laboratorio', nome:'Laboratório HighPro', subtitulo:'Laboratório de Prótese', icon:'ti-tooth'},
   {id:'curso', nome:'Curso HighPro', subtitulo:'Estoque do curso', icon:'ti-school'}
@@ -298,6 +322,7 @@ const STOCK_STORAGE_PREFIX = 'estoque_proto_stock_v1_';
 
 let currentStockId = localStorage.getItem(CURRENT_STOCK_KEY) || '';
 let state = createEmptyState();
+let materialPhotoDraft = '';
 
 function createLaboratorioState() {
   return {
@@ -335,11 +360,28 @@ function getStock(stockId=currentStockId) {
   return STOCKS.find(s=>s.id===stockId) || STOCKS[0];
 }
 
+function normalizeMoneyValue(value) {
+  if(value === undefined || value === null || value === '') return '';
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : '';
+}
+
+function normalizeMaterial(m) {
+  const material = m && typeof m === 'object' ? m : {};
+  return {
+    ...material,
+    custoUn: normalizeMoneyValue(material.custoUn),
+    custoCx: normalizeMoneyValue(material.custoCx),
+    validade: VALIDADES.some(v=>v.value===material.validade) ? material.validade : '',
+    foto: typeof material.foto === 'string' ? material.foto : ''
+  };
+}
+
 function normalizeState(data, stockId) {
   const base = defaultStateFor(stockId);
   const safe = data && typeof data === 'object' ? data : {};
   return {
-    materiais: Array.isArray(safe.materiais) ? safe.materiais : base.materiais,
+    materiais: (Array.isArray(safe.materiais) ? safe.materiais : base.materiais).map(normalizeMaterial),
     casos: Array.isArray(safe.casos) ? safe.casos : base.casos,
     movimentacoes: Array.isArray(safe.movimentacoes) ? safe.movimentacoes : base.movimentacoes,
     nextMatId: Number.isFinite(safe.nextMatId) ? safe.nextMatId : base.nextMatId,
@@ -367,9 +409,9 @@ function loadStock(stockId) {
   localStorage.setItem(CURRENT_STOCK_KEY, stockId);
   try {
     const stored = localStorage.getItem(stockKey(stockId));
-    state = stored ? normalizeState(JSON.parse(stored), stockId) : defaultStateFor(stockId);
+    state = stored ? normalizeState(JSON.parse(stored), stockId) : normalizeState(defaultStateFor(stockId), stockId);
   } catch(e) {
-    state = defaultStateFor(stockId);
+    state = normalizeState(defaultStateFor(stockId), stockId);
   }
   save();
   updateStockHeader();
@@ -441,6 +483,98 @@ function initApp() {
 
 function getStatus(m) { if(m.estoque===0) return 'empty'; if(m.estoque<=m.minimo) return 'low'; return 'ok'; }
 function statusLabel(s) { return s==='ok'?'OK':s==='low'?'Estoque baixo':'Zerado'; }
+function formatMoney(value) {
+  const parsed = normalizeMoneyValue(value);
+  return parsed === '' ? '—' : parsed.toLocaleString('pt-BR', {style:'currency', currency:'BRL'});
+}
+function validadeLabel(value) {
+  const opt = VALIDADES.find(v=>v.value===value);
+  return opt ? opt.label : 'Não informada';
+}
+function materialNameHtml(m) {
+  if(m.foto) return `<button class="material-name-btn" type="button" data-action="photo-material" data-id="${m.id}" title="Ver foto do material"><span>${m.nome}</span><i class="ti ti-photo"></i></button>`;
+  return `<strong>${m.nome}</strong>`;
+}
+function custoValidadeHtml(m) {
+  const validadeClass = m.validade ? `validity-${m.validade}` : '';
+  return `<div class="cost-stack">
+    <span>Un.: <strong>${formatMoney(m.custoUn)}</strong></span>
+    <span>Cx.: <strong>${formatMoney(m.custoCx)}</strong></span>
+    <span><span class="chip ${validadeClass}">${validadeLabel(m.validade)}</span></span>
+  </div>`;
+}
+
+function renderPhotoPreview() {
+  const preview = document.getElementById('photo-preview');
+  if(!preview) return;
+  preview.innerHTML = materialPhotoDraft
+    ? `<img src="${materialPhotoDraft}" alt="Foto do material">`
+    : '<span>Nenhuma foto selecionada</span>';
+}
+
+function removeMaterialPhoto() {
+  materialPhotoDraft = '';
+  const input = document.getElementById('mp');
+  if(input) input.value = '';
+  renderPhotoPreview();
+}
+
+function resizeImageToJpeg(file, maxSize=512, quality=.86) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Não foi possível ler a imagem.'));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('Não foi possível processar a imagem.'));
+      img.onload = () => {
+        const scale = Math.min(1, maxSize / Math.max(img.width, img.height));
+        const width = Math.max(1, Math.round(img.width * scale));
+        const height = Math.max(1, Math.round(img.height * scale));
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, width, height);
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+async function previewMaterialPhoto(input) {
+  const file = input.files && input.files[0];
+  if(!file) return;
+  if(!file.type.startsWith('image/')) {
+    alert('Selecione um arquivo de imagem.');
+    input.value = '';
+    return;
+  }
+  try {
+    materialPhotoDraft = await resizeImageToJpeg(file, 512, .86);
+    renderPhotoPreview();
+  } catch(e) {
+    alert(e.message || 'Não foi possível processar a imagem.');
+    input.value = '';
+  }
+}
+
+function openFotoMaterial(id) {
+  const m = state.materiais.find(x=>x.id===id);
+  if(!m || !m.foto) return;
+  openModal(`
+    <div class="photo-viewer">
+      <div class="photo-viewer-head">
+        <h3>${m.nome}</h3>
+        <button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i> Fechar</button>
+      </div>
+      <img src="${m.foto}" alt="Foto do material">
+    </div>
+  `, 'wide');
+}
 
 function showTab(id) {
   document.querySelectorAll('nav button').forEach((b,i) => {
@@ -511,16 +645,17 @@ function renderMateriais(filtro='') {
   const q = (filtro||'').toLowerCase();
   const lista = state.materiais.filter(m=>!q||m.nome.toLowerCase().includes(q)||m.ref.toLowerCase().includes(q)||m.cat.toLowerCase().includes(q));
   document.getElementById('tabela-materiais').innerHTML = lista.length===0
-    ? '<tr><td colspan="7" class="empty-state">Nenhum material encontrado.</td></tr>'
+    ? '<tr><td colspan="8" class="empty-state">Nenhum material encontrado.</td></tr>'
     : lista.map(m=>`<tr>
-        <td><strong>${m.nome}</strong><br><span style="color:var(--text2);font-size:11px">${m.ref}</span></td>
+        <td>${materialNameHtml(m)}<br><span style="color:var(--text2);font-size:11px">${m.ref}</span></td>
         <td><span class="chip">${m.cat}</span></td>
         <td><strong>${m.estoque}</strong> <span style="color:var(--text2)">${m.unidade}</span></td>
         <td>${m.minimo} ${m.unidade}</td>
+        <td>${custoValidadeHtml(m)}</td>
         <td style="font-size:12px;color:var(--text2)">${m.fornecedor||'—'}</td>
         <td><span class="badge ${getStatus(m)}">${statusLabel(getStatus(m))}</span></td>
         <td style="white-space:nowrap">
-          <button class="btn sm" onclick="editarMat(${m.id})"><i class="ti ti-edit"></i></button>
+          <button class="btn sm" type="button" data-action="edit-material" data-id="${m.id}"><i class="ti ti-edit"></i></button>
           <button class="btn sm" onclick="ajustarEstoque(${m.id})" style="margin-left:4px"><i class="ti ti-arrows-exchange"></i> Ajustar</button>
           <button class="btn sm danger-btn" onclick="excluirMat(${m.id})" style="margin-left:4px"><i class="ti ti-trash"></i></button>
         </td>
@@ -614,16 +749,33 @@ function atualizarMinimo(id, val) {
 
 function openModalMaterial(m=null) {
   const editing = !!m;
+  materialPhotoDraft = m&&m.foto ? m.foto : '';
+  const custoUnValue = m ? normalizeMoneyValue(m.custoUn) : '';
+  const custoCxValue = m ? normalizeMoneyValue(m.custoCx) : '';
   openModal(`
     <h3>${editing?'Editar material':'Novo material'}</h3>
     <div class="form-row"><div class="form-group"><label>Nome do material</label><input id="mn" value="${m?m.nome:''}"></div><div class="form-group"><label>Referência / Código</label><input id="mr" value="${m?m.ref:''}"></div></div>
     <div class="form-row"><div class="form-group"><label>Categoria</label><select id="mc">${CATS.map(c=>`<option${m&&m.cat===c?' selected':''}>${c}</option>`).join('')}</select></div><div class="form-group"><label>Unidade (blocos, kits...)</label><input id="mu" value="${m?m.unidade:'blocos'}"></div></div>
     <div class="form-row"><div class="form-group"><label>Qtd. em estoque</label><input id="me" type="number" min="0" value="${m?m.estoque:0}"></div><div class="form-group"><label>Estoque mínimo (alerta)</label><input id="mm" type="number" min="0" value="${m?m.minimo:3}"></div></div>
+    <div class="form-row3">
+      <div class="form-group"><label>Custo Un.</label><input id="mcu" type="number" min="0" step="0.01" value="${custoUnValue}" placeholder="0,00"></div>
+      <div class="form-group"><label>Custo Cx.</label><input id="mcx" type="number" min="0" step="0.01" value="${custoCxValue}" placeholder="0,00"></div>
+      <div class="form-group"><label>Validade</label><select id="mv"><option value="">Não informada</option>${VALIDADES.map(v=>`<option value="${v.value}"${m&&m.validade===v.value?' selected':''}>${v.label}</option>`).join('')}</select></div>
+    </div>
     <div class="form-group"><label>Fornecedor</label><input id="mf" value="${m?m.fornecedor:''}"></div>
+    <div class="form-group">
+      <label>Foto do material</label>
+      <div class="photo-preview" id="photo-preview"></div>
+      <div class="photo-actions">
+        <input id="mp" type="file" accept="image/*" onchange="previewMaterialPhoto(this)">
+        <button class="btn sm" onclick="removeMaterialPhoto()"><i class="ti ti-photo-x"></i> Remover foto</button>
+      </div>
+    </div>
     <div class="btn-row">
       <button class="btn" onclick="closeModal()">Cancelar</button>
       <button class="btn primary" onclick="salvarMaterial(${m?m.id:0})">${editing?'Salvar alterações':'Adicionar material'}</button>
     </div>`);
+  renderPhotoPreview();
 }
 
 function editarMat(id) { openModalMaterial(state.materiais.find(m=>m.id===id)); }
@@ -638,7 +790,19 @@ function salvarMaterial(id) {
   const nome = document.getElementById('mn').value.trim();
   const ref = document.getElementById('mr').value.trim();
   if(!nome||!ref){ alert('Preencha nome e referência.'); return; }
-  const data = { nome, ref, cat: document.getElementById('mc').value, unidade: document.getElementById('mu').value||'blocos', estoque: parseInt(document.getElementById('me').value)||0, minimo: parseInt(document.getElementById('mm').value)||0, fornecedor: document.getElementById('mf').value.trim() };
+  const data = {
+    nome,
+    ref,
+    cat: document.getElementById('mc').value,
+    unidade: document.getElementById('mu').value||'blocos',
+    estoque: parseInt(document.getElementById('me').value)||0,
+    minimo: parseInt(document.getElementById('mm').value)||0,
+    custoUn: normalizeMoneyValue(document.getElementById('mcu').value),
+    custoCx: normalizeMoneyValue(document.getElementById('mcx').value),
+    validade: document.getElementById('mv').value,
+    foto: materialPhotoDraft,
+    fornecedor: document.getElementById('mf').value.trim()
+  };
   if(id){ Object.assign(state.materiais.find(m=>m.id===id), data); }
   else { data.id = state.nextMatId++; state.materiais.push(data); }
   save(); closeModal();
@@ -739,11 +903,55 @@ function excluirCaso(id) {
   save(); renderCasos(); renderDashboard();
 }
 
-function openModal(html) {
-  document.getElementById('modal-content').innerHTML = html;
+function openModal(html, className='') {
+  const modal = document.getElementById('modal-content');
+  modal.className = `modal ${className}`.trim();
+  modal.innerHTML = html;
   document.getElementById('overlay').classList.add('open');
 }
-function closeModal() { document.getElementById('overlay').classList.remove('open'); }
+function closeModal() {
+  document.getElementById('overlay').classList.remove('open');
+  document.getElementById('modal-content').className = 'modal';
+}
+
+document.addEventListener('click', (event) => {
+  const actionEl = event.target.closest('[data-action]');
+  if(!actionEl) return;
+  const id = parseInt(actionEl.dataset.id);
+  if(actionEl.dataset.action === 'new-material') {
+    event.preventDefault();
+    openModalMaterial();
+  } else if(actionEl.dataset.action === 'edit-material') {
+    event.preventDefault();
+    editarMat(id);
+  } else if(actionEl.dataset.action === 'photo-material') {
+    event.preventDefault();
+    openFotoMaterial(id);
+  }
+});
+
+Object.assign(window, {
+  ajustarEstoque,
+  atualizarMinimo,
+  closeModal,
+  confirmarAjuste,
+  editarMat,
+  excluirCaso,
+  excluirMat,
+  logout,
+  openFotoMaterial,
+  openModalCaso,
+  openModalMaterial,
+  previewMaterialPhoto,
+  removeMaterialPhoto,
+  renderCasos,
+  renderMateriais,
+  salvarCaso,
+  salvarMaterial,
+  selectStock,
+  showTab,
+  toggleMat
+});
 
 initApp();
 </script>
