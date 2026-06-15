@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Estoque — Laboratório de Prótese</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -47,6 +48,13 @@
   .login-brand-icon { width: 44px; height: 44px; border-radius: 8px; background: var(--bg); border: 0.5px solid var(--border); display: flex; align-items: center; justify-content: center; color: #1D9E75; font-size: 24px; }
   .login-title h1 { font-size: 20px; font-weight: 600; margin-bottom: 3px; }
   .login-title span { color: var(--text2); font-size: 13px; }
+  .login-card { background: var(--bg); border: 0.5px solid var(--border); border-radius: var(--radius-lg); padding: 1.25rem; margin-bottom: 1rem; }
+  .login-form { display: grid; gap: 12px; }
+  .login-form .btn { justify-content: center; }
+  .login-message { min-height: 18px; color: var(--danger-text); font-size: 12px; }
+  .login-helper { color: var(--text2); font-size: 12px; line-height: 1.45; margin-top: 10px; }
+  .login-session { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 1rem; color: var(--text2); font-size: 12px; flex-wrap: wrap; }
+  .hidden { display: none !important; }
   .stock-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
   .stock-option { display: flex; align-items: center; gap: 12px; width: 100%; padding: 1rem; border: 0.5px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); cursor: pointer; text-align: left; font-family: inherit; transition: border-color .15s, background .15s, transform .15s; }
   .stock-option:hover { border-color: var(--border2); background: var(--bg2); transform: translateY(-1px); }
@@ -60,6 +68,10 @@
   .header-text { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; min-width: 0; }
   .header-spacer { flex: 1; }
   .switch-stock { flex-shrink: 0; }
+  .sync-status { font-size: 11px; color: var(--text2); border: 0.5px solid var(--border); border-radius: 999px; padding: 4px 8px; background: var(--bg2); white-space: nowrap; }
+  .sync-status.success { color: var(--success-text); border-color: var(--success-border); background: var(--success-bg); }
+  .sync-status.warning { color: var(--warn-text); border-color: var(--warn-border); background: var(--warn-bg); }
+  .sync-status.danger { color: var(--danger-text); border-color: var(--danger-border); background: var(--danger-bg); }
 
   .layout { display: flex; min-height: calc(100vh - 56px); }
 
@@ -137,7 +149,7 @@
   .btn.danger-btn:hover { background: var(--danger-bg); }
 
   .search-row { display: flex; gap: 8px; align-items: center; }
-  input[type=text], input[type=number], input[type=date], select, textarea {
+  input[type=text], input[type=email], input[type=password], input[type=number], input[type=date], select, textarea {
     padding: 8px 10px; border: 0.5px solid var(--border2); border-radius: var(--radius);
     font-size: 13px; background: var(--bg); color: var(--text); font-family: inherit; width: 100%;
   }
@@ -194,10 +206,31 @@
       <div class="login-brand-icon"><i class="ti ti-tooth"></i></div>
       <div class="login-title">
         <h1>Estoque HighPro</h1>
-        <span>Escolha o local</span>
+        <span id="login-subtitle">Entre para sincronizar os dados</span>
       </div>
     </div>
-    <div class="stock-options" id="stock-options"></div>
+    <div class="login-card" id="auth-panel">
+      <form class="login-form" onsubmit="signIn(event)">
+        <div class="form-group" style="margin-bottom:0">
+          <label>E-mail</label>
+          <input id="auth-email" type="email" autocomplete="email" required>
+        </div>
+        <div class="form-group" style="margin-bottom:0">
+          <label>Senha</label>
+          <input id="auth-password" type="password" autocomplete="current-password" required>
+        </div>
+        <button class="btn primary" id="auth-submit" type="submit"><i class="ti ti-login"></i> Entrar</button>
+        <div class="login-message" id="auth-message"></div>
+      </form>
+      <div class="login-helper">Use o usuário criado no Supabase. Os dados ficam sincronizados entre computadores depois do login.</div>
+    </div>
+    <div id="stock-panel" class="hidden">
+      <div class="login-session">
+        <span id="auth-user-label"></span>
+        <button class="btn sm" type="button" onclick="signOut()"><i class="ti ti-logout"></i> Sair</button>
+      </div>
+      <div class="stock-options" id="stock-options"></div>
+    </div>
   </div>
 </div>
 
@@ -208,7 +241,9 @@
     <span id="header-date"></span>
   </div>
   <div class="header-spacer"></div>
+  <span class="sync-status" id="sync-status">Nuvem</span>
   <button class="btn sm switch-stock" onclick="logout()" title="Trocar estoque"><i class="ti ti-switch-horizontal"></i> <span>Trocar estoque</span></button>
+  <button class="btn sm switch-stock" onclick="signOut()" title="Sair da conta"><i class="ti ti-logout"></i> <span>Sair</span></button>
 </header>
 
 <div class="layout">
@@ -334,10 +369,91 @@ const STOCKS = [
 const LEGACY_STORAGE_KEY = 'estoque_proto_v1';
 const CURRENT_STOCK_KEY = 'estoque_proto_current_stock';
 const STOCK_STORAGE_PREFIX = 'estoque_proto_stock_v1_';
+const SUPABASE_URL = 'https://rllegqqcpnirqnvtrtuo.supabase.co';
+const SUPABASE_PUBLIC_KEY = 'sb_publishable_1432XAlIimMJekQP-PSiLw_apYBY00y';
+const CLOUD_TABLE = 'stock_data';
 
 let currentStockId = localStorage.getItem(CURRENT_STOCK_KEY) || '';
 let state = createEmptyState();
 let materialPhotoDraft = '';
+let supabaseClient = null;
+let currentUser = null;
+let isLoadingStock = false;
+let cloudSaveTimer = null;
+
+function initSupabaseClient() {
+  if(!window.supabase || !SUPABASE_URL || !SUPABASE_PUBLIC_KEY) return null;
+  if(!supabaseClient) {
+    supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLIC_KEY, {
+      auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
+    });
+  }
+  return supabaseClient;
+}
+
+function setSyncStatus(text, status='') {
+  const el = document.getElementById('sync-status');
+  if(!el) return;
+  el.textContent = text;
+  el.className = `sync-status ${status}`.trim();
+}
+
+function setAuthMessage(text='', danger=true) {
+  const el = document.getElementById('auth-message');
+  if(!el) return;
+  el.textContent = text;
+  el.style.color = danger ? 'var(--danger-text)' : 'var(--success-text)';
+}
+
+function renderAuthLogin(message='') {
+  document.body.classList.add('login-active');
+  document.getElementById('auth-panel').classList.remove('hidden');
+  document.getElementById('stock-panel').classList.add('hidden');
+  document.getElementById('login-subtitle').textContent = 'Entre para sincronizar os dados';
+  setAuthMessage(message);
+  setSyncStatus('Aguardando login');
+}
+
+async function signIn(event) {
+  if(event) event.preventDefault();
+  const client = initSupabaseClient();
+  if(!client) {
+    setAuthMessage('Não foi possível carregar a conexão com o Supabase.');
+    return;
+  }
+  const email = document.getElementById('auth-email').value.trim();
+  const password = document.getElementById('auth-password').value;
+  const submit = document.getElementById('auth-submit');
+  if(!email || !password) {
+    setAuthMessage('Informe e-mail e senha.');
+    return;
+  }
+  submit.disabled = true;
+  submit.innerHTML = '<i class="ti ti-loader-2"></i> Entrando...';
+  setAuthMessage('');
+  try {
+    const { data, error } = await client.auth.signInWithPassword({ email, password });
+    if(error) throw error;
+    currentUser = data.user;
+    await afterAuthReady();
+  } catch(e) {
+    setAuthMessage('Não foi possível entrar. Confira e-mail e senha.');
+  } finally {
+    submit.disabled = false;
+    submit.innerHTML = '<i class="ti ti-login"></i> Entrar';
+  }
+}
+
+async function signOut() {
+  try { await saveCloudNow(); } catch(e) {}
+  if(supabaseClient) await supabaseClient.auth.signOut();
+  currentUser = null;
+  currentStockId = '';
+  state = createEmptyState();
+  localStorage.removeItem(CURRENT_STOCK_KEY);
+  closeModal();
+  renderAuthLogin();
+}
 
 function createLaboratorioState() {
   return {
@@ -487,31 +603,146 @@ function migrateLegacyStock() {
   } catch(e){}
 }
 
-function save() {
+function localStateFor(stockId) {
+  try {
+    const stored = localStorage.getItem(stockKey(stockId));
+    return stored ? normalizeState(JSON.parse(stored), stockId) : normalizeState(defaultStateFor(stockId), stockId);
+  } catch(e) {
+    return normalizeState(defaultStateFor(stockId), stockId);
+  }
+}
+
+function saveLocalOnly() {
   if(!currentStockId) return;
   try { localStorage.setItem(stockKey(currentStockId), JSON.stringify(state)); } catch(e){}
 }
 
-function loadStock(stockId) {
+function save() {
+  saveLocalOnly();
+  scheduleCloudSave();
+}
+
+function hasCloudData(data) {
+  return !!(data && typeof data === 'object' && Object.keys(data).length);
+}
+
+async function loadStock(stockId) {
   migrateLegacyStock();
   currentStockId = stockId;
   localStorage.setItem(CURRENT_STOCK_KEY, stockId);
-  try {
-    const stored = localStorage.getItem(stockKey(stockId));
-    state = stored ? normalizeState(JSON.parse(stored), stockId) : normalizeState(defaultStateFor(stockId), stockId);
-  } catch(e) {
-    state = normalizeState(defaultStateFor(stockId), stockId);
+  isLoadingStock = true;
+  state = localStateFor(stockId);
+  setSyncStatus('Sincronizando...', 'warning');
+
+  if(supabaseClient && currentUser) {
+    try {
+      const { data, error } = await supabaseClient
+        .from(CLOUD_TABLE)
+        .select('data')
+        .eq('stock_id', stockId)
+        .maybeSingle();
+      if(error) throw error;
+      if(data && hasCloudData(data.data)) {
+        state = normalizeState(data.data, stockId);
+        saveLocalOnly();
+      } else {
+        await saveCloudNow(true);
+      }
+      setSyncStatus('Sincronizado', 'success');
+    } catch(e) {
+      console.warn('Falha ao sincronizar estoque', e);
+      setSyncStatus('Modo local', 'warning');
+      alert('Não foi possível acessar o banco na nuvem. O app abriu com a cópia local deste dispositivo.');
+    }
   }
-  save();
+  isLoadingStock = false;
+  state = normalizeState(state, stockId);
+  saveLocalOnly();
+  try {
+    localStorage.setItem(stockKey(stockId), JSON.stringify(state));
+  } catch(e){}
   updateStockHeader();
+}
+
+function scheduleCloudSave() {
+  if(!supabaseClient || !currentUser || !currentStockId || isLoadingStock) return;
+  clearTimeout(cloudSaveTimer);
+  setSyncStatus('Salvando...', 'warning');
+  cloudSaveTimer = setTimeout(() => {
+    saveCloudNow().catch(e => {
+      console.warn('Falha ao salvar na nuvem', e);
+      setSyncStatus('Falha ao salvar', 'danger');
+    });
+  }, 700);
+}
+
+async function saveCloudNow(force=false) {
+  if(!supabaseClient || !currentUser || !currentStockId) return;
+  if(isLoadingStock && !force) return;
+  clearTimeout(cloudSaveTimer);
+  const payload = {
+    stock_id: currentStockId,
+    data: normalizeState(state, currentStockId),
+    updated_by: currentUser.id,
+    updated_at: new Date().toISOString()
+  };
+  const { error } = await supabaseClient
+    .from(CLOUD_TABLE)
+    .upsert(payload, { onConflict: 'stock_id' });
+  if(error) throw error;
+  setSyncStatus('Sincronizado', 'success');
+}
+
+async function syncCloudSummaries() {
+  if(!supabaseClient || !currentUser) return;
+  try {
+    const { data, error } = await supabaseClient
+      .from(CLOUD_TABLE)
+      .select('stock_id,data');
+    if(error) throw error;
+    (data||[]).forEach(row => {
+      if(STOCKS.some(s=>s.id===row.stock_id) && row.data) {
+        const normalized = normalizeState(row.data, row.stock_id);
+        localStorage.setItem(stockKey(row.stock_id), JSON.stringify(normalized));
+      }
+    });
+    setSyncStatus('Sincronizado', 'success');
+    return data || [];
+  } catch(e) {
+    console.warn('Falha ao carregar resumos da nuvem', e);
+    setSyncStatus('Banco pendente', 'warning');
+    return null;
+  }
+}
+
+async function migrateLocalStocksToCloud(cloudRows) {
+  if(!supabaseClient || !currentUser || !Array.isArray(cloudRows)) return;
+  const cloudStockIds = new Set(cloudRows.filter(row=>hasCloudData(row.data)).map(row=>row.stock_id));
+  const missingStocks = STOCKS.filter(stock=>!cloudStockIds.has(stock.id));
+  if(!missingStocks.length) return;
+  setSyncStatus('Migrando dados...', 'warning');
+  const rows = missingStocks.map(stock=>({
+    stock_id: stock.id,
+    data: localStateFor(stock.id),
+    updated_by: currentUser.id,
+    updated_at: new Date().toISOString()
+  }));
+  const { error } = await supabaseClient
+    .from(CLOUD_TABLE)
+    .upsert(rows, { onConflict: 'stock_id' });
+  if(error) {
+    console.warn('Falha ao migrar dados locais', error);
+    setSyncStatus('Migração pendente', 'warning');
+    return;
+  }
+  setSyncStatus('Sincronizado', 'success');
 }
 
 document.getElementById('header-date').textContent = new Date().toLocaleDateString('pt-BR', {weekday:'long', day:'numeric', month:'long', year:'numeric'});
 
 function stockSummary(stockId) {
   try {
-    const stored = localStorage.getItem(stockKey(stockId));
-    const data = stored ? normalizeState(JSON.parse(stored), stockId) : defaultStateFor(stockId);
+    const data = localStateFor(stockId);
     return `${data.materiais.length} materiais &middot; ${data.casos.length} casos`;
   } catch(e) {
     return 'Sem dados ainda';
@@ -519,8 +750,16 @@ function stockSummary(stockId) {
 }
 
 function renderStockLogin() {
+  if(!currentUser) {
+    renderAuthLogin();
+    return;
+  }
   migrateLegacyStock();
   document.body.classList.add('login-active');
+  document.getElementById('auth-panel').classList.add('hidden');
+  document.getElementById('stock-panel').classList.remove('hidden');
+  document.getElementById('login-subtitle').textContent = 'Escolha o local';
+  document.getElementById('auth-user-label').textContent = currentUser.email ? `Conectado como ${currentUser.email}` : 'Conectado';
   document.getElementById('stock-options').innerHTML = STOCKS.map(s=>`
     <button class="stock-option" onclick="selectStock('${s.id}')">
       <i class="ti ${s.icon}"></i>
@@ -538,9 +777,12 @@ function updateStockHeader() {
   document.title = `Estoque — ${stock.nome}`;
 }
 
-function selectStock(stockId) {
+async function selectStock(stockId) {
   if(!STOCKS.some(s=>s.id===stockId)) return;
-  loadStock(stockId);
+  if(currentStockId && currentStockId!==stockId) {
+    try { await saveCloudNow(); } catch(e) {}
+  }
+  await loadStock(stockId);
   document.body.classList.remove('login-active');
   closeModal();
   const searchMat = document.getElementById('search-mat');
@@ -551,23 +793,44 @@ function selectStock(stockId) {
   showTab('dashboard');
 }
 
-function logout() {
-  save();
+async function logout() {
+  try { await saveCloudNow(); } catch(e) {}
+  saveLocalOnly();
   currentStockId = '';
   localStorage.removeItem(CURRENT_STOCK_KEY);
   renderStockLogin();
 }
 
-function initApp() {
+async function afterAuthReady() {
   migrateLegacyStock();
+  const cloudRows = await syncCloudSummaries();
+  await migrateLocalStocksToCloud(cloudRows);
   if(STOCKS.some(s=>s.id===currentStockId)) {
-    loadStock(currentStockId);
-    document.body.classList.remove('login-active');
-    renderAllViews();
-    showTab('dashboard');
+    await selectStock(currentStockId);
   } else {
     renderStockLogin();
   }
+}
+
+async function initApp() {
+  migrateLegacyStock();
+  const client = initSupabaseClient();
+  if(!client) {
+    renderAuthLogin('Não foi possível carregar a conexão com o Supabase.');
+    return;
+  }
+  setSyncStatus('Verificando login', 'warning');
+  try {
+    const { data } = await client.auth.getSession();
+    currentUser = data.session ? data.session.user : null;
+  } catch(e) {
+    currentUser = null;
+  }
+  if(!currentUser) {
+    renderAuthLogin();
+    return;
+  }
+  await afterAuthReady();
 }
 
 function getStatus(m) { if(m.estoque===0) return 'empty'; if(m.estoque<=m.minimo) return 'low'; return 'ok'; }
@@ -1274,6 +1537,8 @@ Object.assign(window, {
   salvarCaso,
   salvarMaterial,
   selectStock,
+  signIn,
+  signOut,
   showTab,
   toggleMat
 });
