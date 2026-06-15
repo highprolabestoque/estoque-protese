@@ -118,6 +118,14 @@
   .photo-viewer-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
   .photo-viewer-head h3 { margin: 0; }
   .photo-viewer img { width: 100%; max-height: 70vh; object-fit: contain; border-radius: var(--radius); background: var(--bg2); border: 0.5px solid var(--border); }
+  .category-add-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: end; margin-bottom: 1rem; }
+  .category-list { border: 0.5px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+  .category-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border-bottom: 0.5px solid var(--border); }
+  .category-row:last-child { border-bottom: none; }
+  .category-name { min-width: 0; }
+  .category-name strong { display: block; font-size: 13px; }
+  .category-name span { display: block; color: var(--text2); font-size: 11px; margin-top: 2px; }
+  .category-actions { display: flex; gap: 6px; flex-shrink: 0; }
 
   .btn { padding: 8px 14px; border: 0.5px solid var(--border2); border-radius: var(--radius); cursor: pointer; font-size: 13px; background: transparent; color: var(--text); font-family: inherit; transition: background .15s; display: inline-flex; align-items: center; gap: 6px; }
   .btn:hover { background: var(--bg2); }
@@ -170,6 +178,8 @@
     header { padding: .75rem 1rem; }
     .header-text { display: block; }
     .switch-stock span { display: none; }
+    .category-add-row { grid-template-columns: 1fr; }
+    .category-row { align-items: flex-start; }
     nav { display: none; }
     .form-row, .form-row3 { grid-template-columns: 1fr; }
   }
@@ -230,6 +240,7 @@
         <h2>Materiais</h2>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
           <input type="text" placeholder="Buscar..." style="width:200px" oninput="renderMateriais(this.value)" id="search-mat">
+          <button class="btn" type="button" data-action="manage-categories"><i class="ti ti-tags"></i> Nova categoria</button>
           <button class="btn primary" type="button" data-action="new-material"><i class="ti ti-plus"></i> Novo material</button>
         </div>
       </div>
@@ -305,7 +316,7 @@
 </div>
 
 <script>
-const CATS = ['Bloco cerâmica','Bloco zircônia','Bloco PMMA','Disco CAD/CAM','Cimento','Resina','Cerâmica feldspática','Acessório','Outros'];
+const DEFAULT_CATEGORIES = ['Bloco cerâmica','Bloco zircônia','Bloco PMMA','Disco CAD/CAM','Cimento','Resina','Cerâmica feldspática','Acessório','Outros'];
 const TIPOS = ['Coroa unitária','Pontes','Inlay / Onlay','Faceta','Prótese sobre implante','Prótese parcial removível','Prótese total','Provisório'];
 const VALIDADES = [
   {value:'curta', label:'Curta'},
@@ -340,12 +351,13 @@ function createLaboratorioState() {
       {id:3,data:'2025-06-12',paciente:'Carlos Melo',tipo:'Pontes',itens:[{matId:3,qtd:1},{matId:5,qtd:1}],obs:'Ponte 3 elementos'},
     ],
     movimentacoes: [],
+    categorias: [...DEFAULT_CATEGORIES],
     nextMatId:7, nextCasoId:4, nextMovId:1
   };
 }
 
 function createEmptyState() {
-  return { materiais: [], casos: [], movimentacoes: [], nextMatId:1, nextCasoId:1, nextMovId:1 };
+  return { materiais: [], casos: [], movimentacoes: [], categorias: [...DEFAULT_CATEGORIES], nextMatId:1, nextCasoId:1, nextMovId:1 };
 }
 
 function defaultStateFor(stockId) {
@@ -358,6 +370,40 @@ function stockKey(stockId) {
 
 function getStock(stockId=currentStockId) {
   return STOCKS.find(s=>s.id===stockId) || STOCKS[0];
+}
+
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+}
+
+function cleanCategoryName(value) {
+  return String(value || '').trim().replace(/\s+/g, ' ');
+}
+
+function normalizeCategories(list, materiais=[]) {
+  const source = Array.isArray(list) && list.length ? list : DEFAULT_CATEGORIES;
+  const names = [...source, ...materiais.map(m=>m&&m.cat).filter(Boolean)];
+  const seen = new Set();
+  const result = [];
+  names.forEach(name => {
+    const cleaned = cleanCategoryName(name);
+    const key = cleaned.toLowerCase();
+    if(cleaned && !seen.has(key)) {
+      seen.add(key);
+      result.push(cleaned);
+    }
+  });
+  return result.length ? result : ['Outros'];
+}
+
+function getCategories() {
+  state.categorias = normalizeCategories(state.categorias, state.materiais);
+  return state.categorias;
+}
+
+function categoryExists(name, ignoreIndex=-1) {
+  const key = cleanCategoryName(name).toLowerCase();
+  return getCategories().some((cat, index)=>index!==ignoreIndex && cat.toLowerCase()===key);
 }
 
 function normalizeMoneyValue(value) {
@@ -380,10 +426,12 @@ function normalizeMaterial(m) {
 function normalizeState(data, stockId) {
   const base = defaultStateFor(stockId);
   const safe = data && typeof data === 'object' ? data : {};
+  const materiais = (Array.isArray(safe.materiais) ? safe.materiais : base.materiais).map(normalizeMaterial);
   return {
-    materiais: (Array.isArray(safe.materiais) ? safe.materiais : base.materiais).map(normalizeMaterial),
+    materiais,
     casos: Array.isArray(safe.casos) ? safe.casos : base.casos,
     movimentacoes: Array.isArray(safe.movimentacoes) ? safe.movimentacoes : base.movimentacoes,
+    categorias: normalizeCategories(safe.categorias || base.categorias, materiais),
     nextMatId: Number.isFinite(safe.nextMatId) ? safe.nextMatId : base.nextMatId,
     nextCasoId: Number.isFinite(safe.nextCasoId) ? safe.nextCasoId : base.nextCasoId,
     nextMovId: Number.isFinite(safe.nextMovId) ? safe.nextMovId : base.nextMovId
@@ -648,7 +696,7 @@ function renderMateriais(filtro='') {
     ? '<tr><td colspan="8" class="empty-state">Nenhum material encontrado.</td></tr>'
     : lista.map(m=>`<tr>
         <td>${materialNameHtml(m)}<br><span style="color:var(--text2);font-size:11px">${m.ref}</span></td>
-        <td><span class="chip">${m.cat}</span></td>
+        <td><span class="chip">${escapeHtml(m.cat)}</span></td>
         <td><strong>${m.estoque}</strong> <span style="color:var(--text2)">${m.unidade}</span></td>
         <td>${m.minimo} ${m.unidade}</td>
         <td>${custoValidadeHtml(m)}</td>
@@ -747,15 +795,100 @@ function atualizarMinimo(id, val) {
   if(m){ m.minimo = Math.max(0, parseInt(val)||0); save(); }
 }
 
+function openModalCategorias() {
+  openModal(`
+    <h3>Categorias</h3>
+    <div class="category-add-row">
+      <div class="form-group" style="margin-bottom:0">
+        <label>Nova categoria</label>
+        <input id="cat-new" placeholder="Ex: Metal, Gesso, Escaneamento..." onkeydown="if(event.key==='Enter')adicionarCategoria()">
+      </div>
+      <button class="btn primary" onclick="adicionarCategoria()"><i class="ti ti-plus"></i> Adicionar</button>
+    </div>
+    <div id="category-list" class="category-list"></div>
+    <div class="btn-row">
+      <button class="btn" onclick="closeModal()">Fechar</button>
+    </div>
+  `);
+  renderCategoriasModal();
+}
+
+function renderCategoriasModal() {
+  const list = document.getElementById('category-list');
+  if(!list) return;
+  const categorias = getCategories();
+  list.innerHTML = categorias.map((cat, index)=>{
+    const used = state.materiais.filter(m=>m.cat===cat).length;
+    return `<div class="category-row">
+      <div class="category-name">
+        <strong>${escapeHtml(cat)}</strong>
+        <span>${used} material${used===1?'':'s'}</span>
+      </div>
+      <div class="category-actions">
+        <button class="btn sm" onclick="editarCategoria(${index})"><i class="ti ti-edit"></i></button>
+        <button class="btn sm danger-btn" onclick="excluirCategoria(${index})"><i class="ti ti-trash"></i></button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function adicionarCategoria() {
+  const input = document.getElementById('cat-new');
+  const nome = cleanCategoryName(input ? input.value : '');
+  if(!nome){ alert('Informe o nome da categoria.'); return; }
+  if(categoryExists(nome)){ alert('Essa categoria já existe.'); return; }
+  state.categorias.push(nome);
+  save();
+  if(input) input.value = '';
+  renderCategoriasModal();
+  renderAllViews();
+}
+
+function editarCategoria(index) {
+  const categorias = getCategories();
+  const atual = categorias[index];
+  if(!atual) return;
+  const novo = cleanCategoryName(prompt('Novo nome da categoria:', atual));
+  if(!novo) return;
+  if(categoryExists(novo, index)){ alert('Essa categoria já existe.'); return; }
+  state.categorias[index] = novo;
+  state.materiais.forEach(m=>{ if(m.cat===atual) m.cat = novo; });
+  save();
+  renderCategoriasModal();
+  renderAllViews();
+}
+
+function excluirCategoria(index) {
+  const categorias = getCategories();
+  const cat = categorias[index];
+  if(!cat) return;
+  if(categorias.length===1){ alert('Mantenha pelo menos uma categoria.'); return; }
+  const usados = state.materiais.filter(m=>m.cat===cat).length;
+  const restantes = categorias.filter((_, i)=>i!==index);
+  let fallback = restantes.find(c=>c.toLowerCase()==='outros') || restantes[0] || 'Outros';
+  const msg = usados
+    ? `Excluir "${cat}"? ${usados} material${usados===1?'':'s'} será${usados===1?'':'o'} movido${usados===1?'':'s'} para "${fallback}".`
+    : `Excluir "${cat}"?`;
+  if(!confirm(msg)) return;
+  state.categorias = restantes.length ? restantes : [fallback];
+  if(!state.categorias.includes(fallback)) state.categorias.push(fallback);
+  state.materiais.forEach(m=>{ if(m.cat===cat) m.cat = fallback; });
+  save();
+  renderCategoriasModal();
+  renderAllViews();
+}
+
 function openModalMaterial(m=null) {
   const editing = !!m;
   materialPhotoDraft = m&&m.foto ? m.foto : '';
   const custoUnValue = m ? normalizeMoneyValue(m.custoUn) : '';
   const custoCxValue = m ? normalizeMoneyValue(m.custoCx) : '';
+  const categorias = getCategories();
+  const selectedCategory = m&&m.cat ? m.cat : categorias[0];
   openModal(`
     <h3>${editing?'Editar material':'Novo material'}</h3>
     <div class="form-row"><div class="form-group"><label>Nome do material</label><input id="mn" value="${m?m.nome:''}"></div><div class="form-group"><label>Referência / Código</label><input id="mr" value="${m?m.ref:''}"></div></div>
-    <div class="form-row"><div class="form-group"><label>Categoria</label><select id="mc">${CATS.map(c=>`<option${m&&m.cat===c?' selected':''}>${c}</option>`).join('')}</select></div><div class="form-group"><label>Unidade (blocos, kits...)</label><input id="mu" value="${m?m.unidade:'blocos'}"></div></div>
+    <div class="form-row"><div class="form-group"><label>Categoria</label><select id="mc">${categorias.map(c=>`<option value="${escapeHtml(c)}"${selectedCategory===c?' selected':''}>${escapeHtml(c)}</option>`).join('')}</select></div><div class="form-group"><label>Unidade (blocos, kits...)</label><input id="mu" value="${m?m.unidade:'blocos'}"></div></div>
     <div class="form-row"><div class="form-group"><label>Qtd. em estoque</label><input id="me" type="number" min="0" value="${m?m.estoque:0}"></div><div class="form-group"><label>Estoque mínimo (alerta)</label><input id="mm" type="number" min="0" value="${m?m.minimo:3}"></div></div>
     <div class="form-row3">
       <div class="form-group"><label>Custo Un.</label><input id="mcu" type="number" min="0" step="0.01" value="${custoUnValue}" placeholder="0,00"></div>
@@ -921,6 +1054,9 @@ document.addEventListener('click', (event) => {
   if(actionEl.dataset.action === 'new-material') {
     event.preventDefault();
     openModalMaterial();
+  } else if(actionEl.dataset.action === 'manage-categories') {
+    event.preventDefault();
+    openModalCategorias();
   } else if(actionEl.dataset.action === 'edit-material') {
     event.preventDefault();
     editarMat(id);
@@ -931,15 +1067,19 @@ document.addEventListener('click', (event) => {
 });
 
 Object.assign(window, {
+  adicionarCategoria,
   ajustarEstoque,
   atualizarMinimo,
   closeModal,
   confirmarAjuste,
+  editarCategoria,
   editarMat,
+  excluirCategoria,
   excluirCaso,
   excluirMat,
   logout,
   openFotoMaterial,
+  openModalCategorias,
   openModalCaso,
   openModalMaterial,
   previewMaterialPhoto,
