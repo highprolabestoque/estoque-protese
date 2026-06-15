@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Estoque — Laboratório de Prótese</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #ffffff;
+    --bg2: #f7f7f5;
+    --bg3: #f0efe9;
+    --text: #1a1a18;
+    --text2: #6b6b66;
+    --text3: #9e9e98;
+    --border: rgba(0,0,0,0.12);
+    --border2: rgba(0,0,0,0.22);
+    --radius: 8px;
+    --radius-lg: 12px;
+    --success-bg: #eaf3de; --success-text: #3b6d11; --success-border: #97c459;
+    --warn-bg: #faeeda;   --warn-text: #854f0b;   --warn-border: #ef9f27;
+    --danger-bg: #fcebeb; --danger-text: #a32d2d; --danger-border: #f09595;
+    --info-bg: #e6f1fb;   --info-text: #185fa5;   --info-border: #85b7eb;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1e1e1c; --bg2: #2a2a28; --bg3: #333330;
+      --text: #f0efe9; --text2: #b0b0a8; --text3: #6b6b66;
+      --border: rgba(255,255,255,0.1); --border2: rgba(255,255,255,0.2);
+      --success-bg: #173404; --success-text: #c0dd97; --success-border: #3b6d11;
+      --warn-bg: #412402;   --warn-text: #fac775;   --warn-border: #854f0b;
+      --danger-bg: #501313; --danger-text: #f7c1c1; --danger-border: #a32d2d;
+      --info-bg: #042c53;   --info-text: #b5d4f4;   --info-border: #185fa5;
+    }
+  }
+
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 14px; color: var(--text); background: var(--bg3); min-height: 100vh; }
+
+  header { background: var(--bg); border-bottom: 0.5px solid var(--border); padding: 0 1.5rem; display: flex; align-items: center; gap: 12px; height: 56px; position: sticky; top: 0; z-index: 10; }
+  header h1 { font-size: 16px; font-weight: 500; }
+  header span { font-size: 12px; color: var(--text2); }
+
+  .layout { display: flex; min-height: calc(100vh - 56px); }
+
+  nav { width: 200px; background: var(--bg); border-right: 0.5px solid var(--border); padding: 1rem 0; flex-shrink: 0; position: sticky; top: 56px; height: calc(100vh - 56px); overflow-y: auto; }
+  nav button { display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px 1.25rem; border: none; background: none; cursor: pointer; font-size: 13px; color: var(--text2); text-align: left; font-family: inherit; transition: background .15s, color .15s; }
+  nav button:hover { background: var(--bg2); color: var(--text); }
+  nav button.active { background: var(--bg2); color: var(--text); font-weight: 500; border-right: 2px solid var(--text); }
+  nav button i { font-size: 18px; }
+
+  main { flex: 1; padding: 1.5rem; max-width: 960px; }
+
+  .section { display: none; } .section.active { display: block; }
+
+  .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 8px; }
+  .page-header h2 { font-size: 18px; font-weight: 500; }
+
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 1.5rem; }
+  .card { background: var(--bg2); border-radius: var(--radius); padding: 1rem; }
+  .card-label { font-size: 11px; color: var(--text2); margin-bottom: 4px; text-transform: uppercase; letter-spacing: .04em; }
+  .card-value { font-size: 28px; font-weight: 500; line-height: 1; }
+  .card-value.danger { color: var(--danger-text); }
+  .card-value.warning { color: var(--warn-text); }
+  .card-value.success { color: var(--success-text); }
+
+  .panel { background: var(--bg); border: 0.5px solid var(--border); border-radius: var(--radius-lg); padding: 1.25rem; margin-bottom: 1rem; }
+  .panel-title { font-size: 14px; font-weight: 500; margin-bottom: 1rem; display: flex; align-items: center; gap: 6px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; font-size: 11px; font-weight: 500; color: var(--text2); padding: 8px; border-bottom: 0.5px solid var(--border); text-transform: uppercase; letter-spacing: .04em; }
+  td { padding: 10px 8px; border-bottom: 0.5px solid var(--border); vertical-align: middle; }
+  tr:last-child td { border-bottom: none; }
+  .panel-table { padding: 0; overflow: hidden; }
+  .panel-table table th:first-child, .panel-table table td:first-child { padding-left: 1.25rem; }
+  .panel-table table th:last-child, .panel-table table td:last-child { padding-right: 1.25rem; }
+
+  .badge { display: inline-block; padding: 3px 8px; border-radius: 20px; font-size: 11px; font-weight: 500; }
+  .badge.ok { background: var(--success-bg); color: var(--success-text); }
+  .badge.low { background: var(--warn-bg); color: var(--warn-text); }
+  .badge.empty { background: var(--danger-bg); color: var(--danger-text); }
+
+  .chip { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 11px; background: var(--bg2); color: var(--text2); margin: 2px; border: 0.5px solid var(--border); }
+
+  .btn { padding: 8px 14px; border: 0.5px solid var(--border2); border-radius: var(--radius); cursor: pointer; font-size: 13px; background: transparent; color: var(--text); font-family: inherit; transition: background .15s; display: inline-flex; align-items: center; gap: 6px; }
+  .btn:hover { background: var(--bg2); }
+  .btn.primary { background: var(--text); color: var(--bg); border-color: var(--text); }
+  .btn.primary:hover { opacity: .85; }
+  .btn.sm { padding: 5px 10px; font-size: 12px; }
+  .btn.danger-btn { color: var(--danger-text); border-color: var(--danger-border); }
+  .btn.danger-btn:hover { background: var(--danger-bg); }
+
+  .search-row { display: flex; gap: 8px; align-items: center; }
+  input[type=text], input[type=number], input[type=date], select, textarea {
+    padding: 8px 10px; border: 0.5px solid var(--border2); border-radius: var(--radius);
+    font-size: 13px; background: var(--bg); color: var(--text); font-family: inherit; width: 100%;
+  }
+  input:focus, select:focus, textarea:focus { outline: none; border-color: var(--text); }
+
+  .form-group { margin-bottom: 12px; }
+  .form-group label { display: block; font-size: 12px; color: var(--text2); margin-bottom: 4px; }
+  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+  .form-row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+
+  .alert-box { padding: 10px 14px; border-radius: var(--radius); margin-bottom: 8px; font-size: 13px; display: flex; align-items: center; gap: 10px; }
+  .alert-box.warning { background: var(--warn-bg); color: var(--warn-text); border: 0.5px solid var(--warn-border); }
+  .alert-box.danger { background: var(--danger-bg); color: var(--danger-text); border: 0.5px solid var(--danger-border); }
+
+  .uso-item { padding: 10px 0; border-bottom: 0.5px solid var(--border); display: flex; gap: 12px; align-items: flex-start; }
+  .uso-item:last-child { border-bottom: none; }
+  .uso-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--info-text); margin-top: 5px; flex-shrink: 0; }
+
+  .empty-state { text-align: center; padding: 2rem; color: var(--text2); font-size: 13px; }
+  .empty-state i { font-size: 28px; display: block; margin-bottom: 8px; opacity: .5; }
+
+  .overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 100; align-items: center; justify-content: center; padding: 1rem; }
+  .overlay.open { display: flex; }
+  .modal { background: var(--bg); border-radius: var(--radius-lg); border: 0.5px solid var(--border); padding: 1.5rem; width: min(540px, 100%); max-height: 90vh; overflow-y: auto; }
+  .modal h3 { font-size: 15px; font-weight: 500; margin-bottom: 1.25rem; }
+  .btn-row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 1.25rem; }
+
+  .mat-picker-item { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 0.5px solid var(--border); }
+  .mat-picker-item:last-child { border-bottom: none; }
+  .mat-picker-item label { flex: 1; font-size: 13px; cursor: pointer; margin-bottom: 0; }
+  .mat-picker-item input[type=checkbox] { width: auto; flex-shrink: 0; cursor: pointer; }
+  .mat-picker-item input[type=number] { width: 60px; text-align: center; flex-shrink: 0; }
+
+  @media (max-width: 640px) {
+    nav { display: none; }
+    .form-row, .form-row3 { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <i class="ti ti-tooth" style="font-size:22px;color:#1D9E75"></i>
+  <h1>Estoque — Laboratório de Prótese</h1>
+  <span id="header-date"></span>
+</header>
+
+<div class="layout">
+  <nav>
+    <button class="active" onclick="showTab('dashboard')"><i class="ti ti-layout-dashboard"></i> Dashboard</button>
+    <button onclick="showTab('materiais')"><i class="ti ti-package"></i> Materiais</button>
+    <button onclick="showTab('casos')"><i class="ti ti-clipboard-list"></i> Casos</button>
+    <button onclick="showTab('historico')"><i class="ti ti-history"></i> Histórico</button>
+    <button onclick="showTab('alertas')"><i class="ti ti-bell"></i> Alertas</button>
+  </nav>
+
+  <main>
+    <!-- DASHBOARD -->
+    <div id="tab-dashboard" class="section active">
+      <div class="page-header"><h2>Dashboard</h2></div>
+      <div class="cards" id="stat-cards"></div>
+      <div class="panel">
+        <div class="panel-title"><i class="ti ti-alert-triangle"></i> Materiais com estoque baixo ou zerado</div>
+        <div id="alerta-lista"></div>
+      </div>
+      <div class="panel">
+        <div class="panel-title"><i class="ti ti-clock"></i> Últimas movimentações</div>
+        <div id="ultimas-mov"></div>
+      </div>
+    </div>
+
+    <!-- MATERIAIS -->
+    <div id="tab-materiais" class="section">
+      <div class="page-header">
+        <h2>Materiais</h2>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <input type="text" placeholder="Buscar..." style="width:200px" oninput="renderMateriais(this.value)" id="search-mat">
+          <button class="btn primary" onclick="openModalMaterial()"><i class="ti ti-plus"></i> Novo material</button>
+        </div>
+      </div>
+      <div class="panel panel-table">
+        <table>
+          <thead><tr>
+            <th>Material / Referência</th>
+            <th>Categoria</th>
+            <th>Em estoque</th>
+            <th>Mínimo</th>
+            <th>Fornecedor</th>
+            <th>Status</th>
+            <th></th>
+          </tr></thead>
+          <tbody id="tabela-materiais"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- CASOS -->
+    <div id="tab-casos" class="section">
+      <div class="page-header">
+        <h2>Casos</h2>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <input type="text" placeholder="Buscar..." style="width:200px" oninput="renderCasos(this.value)" id="search-caso">
+          <button class="btn primary" onclick="openModalCaso()"><i class="ti ti-plus"></i> Registrar caso</button>
+        </div>
+      </div>
+      <div class="panel panel-table">
+        <table>
+          <thead><tr>
+            <th>Data</th>
+            <th>Paciente</th>
+            <th>Tipo</th>
+            <th>Materiais usados</th>
+            <th style="text-align:center">Qtd</th>
+            <th></th>
+          </tr></thead>
+          <tbody id="tabela-casos"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- HISTORICO -->
+    <div id="tab-historico" class="section">
+      <div class="page-header"><h2>Histórico completo</h2></div>
+      <div class="panel">
+        <div id="historico-lista"></div>
+      </div>
+    </div>
+
+    <!-- ALERTAS -->
+    <div id="tab-alertas" class="section">
+      <div class="page-header"><h2>Alertas e pedidos</h2></div>
+      <div class="panel">
+        <div class="panel-title"><i class="ti ti-settings"></i> Estoque mínimo por material</div>
+        <p style="font-size:13px;color:var(--text2);margin-bottom:1rem">Quando o estoque chegar nesse número, o sistema exibe alerta no dashboard.</p>
+        <div id="alertas-config"></div>
+      </div>
+      <div class="panel">
+        <div class="panel-title"><i class="ti ti-shopping-cart"></i> Simulação de pedido</div>
+        <p style="font-size:13px;color:var(--text2);margin-bottom:1rem">Materiais abaixo do mínimo com sugestão de quantidade a repor.</p>
+        <div id="pedido-simulado"></div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- OVERLAY MODAL -->
+<div class="overlay" id="overlay" onclick="if(event.target===this)closeModal()">
+  <div class="modal" id="modal-content"></div>
+</div>
+
+<script>
+const CATS = ['Bloco cerâmica','Bloco zircônia','Bloco PMMA','Disco CAD/CAM','Cimento','Resina','Cerâmica feldspática','Acessório','Outros'];
+const TIPOS = ['Coroa unitária','Pontes','Inlay / Onlay','Faceta','Prótese sobre implante','Prótese parcial removível','Prótese total','Provisório'];
+
+let state = {
+  materiais: [
+    {id:1,nome:'Bloco IPS e.max CAD',ref:'E.MAX-A2-LT',cat:'Bloco cerâmica',estoque:8,minimo:5,fornecedor:'Ivoclar',unidade:'blocos'},
+    {id:2,nome:'Bloco Vita Suprinity',ref:'VITA-SUP-B1',cat:'Bloco cerâmica',estoque:3,minimo:5,fornecedor:'VITA',unidade:'blocos'},
+    {id:3,nome:'Disco Zircônia Katana',ref:'KAT-ZR-D98',cat:'Bloco zircônia',estoque:2,minimo:3,fornecedor:'Kuraray',unidade:'discos'},
+    {id:4,nome:'Bloco PMMA Provisório',ref:'PMMA-A1-14',cat:'Bloco PMMA',estoque:12,minimo:4,fornecedor:'Schütz Dental',unidade:'blocos'},
+    {id:5,nome:'Cimento Multilink N',ref:'MULT-N-CL',cat:'Cimento',estoque:4,minimo:3,fornecedor:'Ivoclar',unidade:'kits'},
+    {id:6,nome:'Bloco IPS Empress CAD',ref:'EMP-A3-C14',cat:'Bloco cerâmica',estoque:0,minimo:4,fornecedor:'Ivoclar',unidade:'blocos'},
+  ],
+  casos: [
+    {id:1,data:'2025-06-10',paciente:'Roberto Alves',tipo:'Coroa unitária',itens:[{matId:1,qtd:1},{matId:5,qtd:1}],obs:'Elemento 36'},
+    {id:2,data:'2025-06-11',paciente:'Ana Ferreira',tipo:'Faceta',itens:[{matId:1,qtd:3}],obs:'Elem. 11,12,13'},
+    {id:3,data:'2025-06-12',paciente:'Carlos Melo',tipo:'Pontes',itens:[{matId:3,qtd:1},{matId:5,qtd:1}],obs:'Ponte 3 elementos'},
+  ],
+  nextMatId:7, nextCasoId:4
+};
+
+function save() { try { localStorage.setItem('estoque_proto_v1', JSON.stringify(state)); } catch(e){} }
+function load() { try { const d = localStorage.getItem('estoque_proto_v1'); if(d) state = JSON.parse(d); } catch(e){} }
+load();
+
+document.getElementById('header-date').textContent = new Date().toLocaleDateString('pt-BR', {weekday:'long', day:'numeric', month:'long', year:'numeric'});
+
+function getStatus(m) { if(m.estoque===0) return 'empty'; if(m.estoque<=m.minimo) return 'low'; return 'ok'; }
+function statusLabel(s) { return s==='ok'?'OK':s==='low'?'Estoque baixo':'Zerado'; }
+
+function showTab(id) {
+  document.querySelectorAll('nav button').forEach((b,i) => {
+    b.classList.toggle('active', ['dashboard','materiais','casos','historico','alertas'][i]===id);
+  });
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.getElementById('tab-'+id).classList.add('active');
+  const fn = {dashboard:renderDashboard, materiais:renderMateriais, casos:renderCasos, historico:renderHistorico, alertas:renderAlertas};
+  if(fn[id]) fn[id]();
+}
+
+function renderDashboard() {
+  const total = state.materiais.reduce((a,m)=>a+m.estoque,0);
+  const baixos = state.materiais.filter(m=>getStatus(m)==='low').length;
+  const zerados = state.materiais.filter(m=>getStatus(m)==='empty').length;
+  document.getElementById('stat-cards').innerHTML = `
+    <div class="card"><div class="card-label">Materiais cadastrados</div><div class="card-value">${state.materiais.length}</div></div>
+    <div class="card"><div class="card-label">Unidades em estoque</div><div class="card-value">${total}</div></div>
+    <div class="card"><div class="card-label">Estoque baixo</div><div class="card-value warning">${baixos}</div></div>
+    <div class="card"><div class="card-label">Zerados</div><div class="card-value danger">${zerados}</div></div>
+    <div class="card"><div class="card-label">Casos registrados</div><div class="card-value">${state.casos.length}</div></div>
+  `;
+  const alertas = state.materiais.filter(m=>getStatus(m)!=='ok');
+  document.getElementById('alerta-lista').innerHTML = alertas.length===0
+    ? '<div class="empty-state"><i class="ti ti-circle-check"></i>Todos os materiais com estoque adequado.</div>'
+    : alertas.map(m=>`<div class="alert-box ${getStatus(m)==='empty'?'danger':'warning'}">
+        <i class="ti ti-${getStatus(m)==='empty'?'circle-x':'alert-triangle'}"></i>
+        <div><strong>${m.nome}</strong> (${m.ref}) — ${m.estoque} ${m.unidade} em estoque · mínimo: ${m.minimo}</div>
+      </div>`).join('');
+
+  const movs = [...state.casos].reverse().slice(0,5);
+  document.getElementById('ultimas-mov').innerHTML = movs.length===0
+    ? '<div class="empty-state"><i class="ti ti-clipboard-list"></i>Nenhum caso registrado ainda.</div>'
+    : movs.map(c => {
+        const matNames = c.itens.map(it=>{ const m=state.materiais.find(x=>x.id===it.matId); return m?`${it.qtd}× ${m.nome}`:''; }).filter(Boolean).join(', ');
+        return `<div class="uso-item"><div class="uso-dot"></div><div><strong>${c.paciente}</strong> — ${c.tipo}<br><span style="color:var(--text2);font-size:12px">${c.data} · ${matNames||'—'}${c.obs?' · '+c.obs:''}</span></div></div>`;
+      }).join('');
+}
+
+function renderMateriais(filtro='') {
+  const q = (filtro||'').toLowerCase();
+  const lista = state.materiais.filter(m=>!q||m.nome.toLowerCase().includes(q)||m.ref.toLowerCase().includes(q)||m.cat.toLowerCase().includes(q));
+  document.getElementById('tabela-materiais').innerHTML = lista.length===0
+    ? '<tr><td colspan="7" class="empty-state">Nenhum material encontrado.</td></tr>'
+    : lista.map(m=>`<tr>
+        <td><strong>${m.nome}</strong><br><span style="color:var(--text2);font-size:11px">${m.ref}</span></td>
+        <td><span class="chip">${m.cat}</span></td>
+        <td><strong>${m.estoque}</strong> <span style="color:var(--text2)">${m.unidade}</span></td>
+        <td>${m.minimo} ${m.unidade}</td>
+        <td style="font-size:12px;color:var(--text2)">${m.fornecedor||'—'}</td>
+        <td><span class="badge ${getStatus(m)}">${statusLabel(getStatus(m))}</span></td>
+        <td style="white-space:nowrap">
+          <button class="btn sm" onclick="editarMat(${m.id})"><i class="ti ti-edit"></i></button>
+          <button class="btn sm" onclick="ajustarEstoque(${m.id})" style="margin-left:4px"><i class="ti ti-arrows-exchange"></i> Ajustar</button>
+          <button class="btn sm danger-btn" onclick="excluirMat(${m.id})" style="margin-left:4px"><i class="ti ti-trash"></i></button>
+        </td>
+      </tr>`).join('');
+}
+
+function renderCasos(filtro='') {
+  const q = (filtro||'').toLowerCase();
+  const lista = [...state.casos].filter(c=>!q||c.paciente.toLowerCase().includes(q)||c.tipo.toLowerCase().includes(q)).reverse();
+  document.getElementById('tabela-casos').innerHTML = lista.length===0
+    ? '<tr><td colspan="6" class="empty-state">Nenhum caso registrado.</td></tr>'
+    : lista.map(c=>{
+        const qtdTotal = c.itens.reduce((a,i)=>a+i.qtd,0);
+        const chips = c.itens.map(it=>{ const m=state.materiais.find(x=>x.id===it.matId); return m?`<span class="chip">${it.qtd}× ${m.nome}</span>`:''; }).join('');
+        return `<tr>
+          <td style="white-space:nowrap;font-size:12px">${c.data}</td>
+          <td><strong>${c.paciente}</strong>${c.obs?`<br><span style="font-size:11px;color:var(--text2)">${c.obs}</span>`:''}</td>
+          <td><span class="chip">${c.tipo}</span></td>
+          <td>${chips||'—'}</td>
+          <td style="text-align:center"><strong>${qtdTotal}</strong></td>
+          <td><button class="btn sm danger-btn" onclick="excluirCaso(${c.id})"><i class="ti ti-trash"></i></button></td>
+        </tr>`;
+      }).join('');
+}
+
+function renderHistorico() {
+  const todos = [...state.casos].reverse();
+  document.getElementById('historico-lista').innerHTML = todos.length===0
+    ? '<div class="empty-state"><i class="ti ti-history"></i>Sem movimentações registradas.</div>'
+    : todos.map(c=>{
+        const itensStr = c.itens.map(it=>{ const m=state.materiais.find(x=>x.id===it.matId); return m?`<strong>${it.qtd}× ${m.nome}</strong> (${m.ref})`:''; }).filter(Boolean).join(' · ');
+        return `<div class="uso-item"><div class="uso-dot"></div><div style="flex:1">
+          <div style="display:flex;justify-content:space-between;gap:8px"><strong>${c.paciente}</strong><span style="font-size:12px;color:var(--text2);white-space:nowrap">${c.data}</span></div>
+          <div style="margin:3px 0"><span class="chip">${c.tipo}</span>${c.obs?` <span style="font-size:12px;color:var(--text2)">${c.obs}</span>`:''}</div>
+          <div style="font-size:12px;color:var(--text2);margin-top:2px">${itensStr||'—'}</div>
+        </div></div>`;
+      }).join('');
+}
+
+function renderAlertas() {
+  document.getElementById('alertas-config').innerHTML = state.materiais.map(m=>`
+    <div style="display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:0.5px solid var(--border)">
+      <div style="flex:1"><strong style="font-size:13px">${m.nome}</strong><br><span style="font-size:11px;color:var(--text2)">${m.ref}</span></div>
+      <label style="font-size:12px;color:var(--text2);white-space:nowrap;margin-bottom:0">Mínimo:</label>
+      <input type="number" min="0" value="${m.minimo}" style="width:64px;text-align:center" onchange="atualizarMinimo(${m.id},this.value)">
+      <span style="font-size:12px;color:var(--text2)">${m.unidade}</span>
+      <span class="badge ${getStatus(m)}">${m.estoque} em estoque</span>
+    </div>`).join('');
+
+  const precisam = state.materiais.filter(m=>getStatus(m)!=='ok');
+  document.getElementById('pedido-simulado').innerHTML = precisam.length===0
+    ? '<div class="empty-state"><i class="ti ti-circle-check"></i>Nenhum material precisando de pedido.</div>'
+    : `<table><thead><tr><th>Material</th><th>Ref.</th><th>Fornecedor</th><th style="text-align:center">Estoque</th><th style="text-align:center">Mínimo</th><th style="text-align:center">Sugestão de pedido</th></tr></thead><tbody>${
+        precisam.map(m=>`<tr>
+          <td>${m.nome}</td>
+          <td style="font-size:12px;color:var(--text2)">${m.ref}</td>
+          <td style="font-size:12px">${m.fornecedor||'—'}</td>
+          <td style="text-align:center"><span class="badge ${getStatus(m)}">${m.estoque}</span></td>
+          <td style="text-align:center">${m.minimo}</td>
+          <td style="text-align:center;font-weight:500">${Math.max(m.minimo*2-m.estoque, m.minimo-m.estoque+2)} ${m.unidade}</td>
+        </tr>`).join('')
+      }</tbody></table>`;
+}
+
+function atualizarMinimo(id, val) {
+  const m = state.materiais.find(x=>x.id===id);
+  if(m){ m.minimo = Math.max(0, parseInt(val)||0); save(); }
+}
+
+function openModalMaterial(m=null) {
+  const editing = !!m;
+  openModal(`
+    <h3>${editing?'Editar material':'Novo material'}</h3>
+    <div class="form-row"><div class="form-group"><label>Nome do material</label><input id="mn" value="${m?m.nome:''}"></div><div class="form-group"><label>Referência / Código</label><input id="mr" value="${m?m.ref:''}"></div></div>
+    <div class="form-row"><div class="form-group"><label>Categoria</label><select id="mc">${CATS.map(c=>`<option${m&&m.cat===c?' selected':''}>${c}</option>`).join('')}</select></div><div class="form-group"><label>Unidade (blocos, kits...)</label><input id="mu" value="${m?m.unidade:'blocos'}"></div></div>
+    <div class="form-row"><div class="form-group"><label>Qtd. em estoque</label><input id="me" type="number" min="0" value="${m?m.estoque:0}"></div><div class="form-group"><label>Estoque mínimo (alerta)</label><input id="mm" type="number" min="0" value="${m?m.minimo:3}"></div></div>
+    <div class="form-group"><label>Fornecedor</label><input id="mf" value="${m?m.fornecedor:''}"></div>
+    <div class="btn-row">
+      <button class="btn" onclick="closeModal()">Cancelar</button>
+      <button class="btn primary" onclick="salvarMaterial(${m?m.id:0})">${editing?'Salvar alterações':'Adicionar material'}</button>
+    </div>`);
+}
+
+function editarMat(id) { openModalMaterial(state.materiais.find(m=>m.id===id)); }
+
+function excluirMat(id) {
+  if(!confirm('Excluir este material? Ele não poderá ser recuperado.')) return;
+  state.materiais = state.materiais.filter(m=>m.id!==id);
+  save(); renderMateriais(document.getElementById('search-mat').value);
+}
+
+function salvarMaterial(id) {
+  const nome = document.getElementById('mn').value.trim();
+  const ref = document.getElementById('mr').value.trim();
+  if(!nome||!ref){ alert('Preencha nome e referência.'); return; }
+  const data = { nome, ref, cat: document.getElementById('mc').value, unidade: document.getElementById('mu').value||'blocos', estoque: parseInt(document.getElementById('me').value)||0, minimo: parseInt(document.getElementById('mm').value)||0, fornecedor: document.getElementById('mf').value.trim() };
+  if(id){ Object.assign(state.materiais.find(m=>m.id===id), data); }
+  else { data.id = state.nextMatId++; state.materiais.push(data); }
+  save(); closeModal();
+  renderMateriais(document.getElementById('search-mat').value);
+  renderDashboard();
+}
+
+function ajustarEstoque(id) {
+  const m = state.materiais.find(x=>x.id===id);
+  openModal(`
+    <h3>Ajustar estoque</h3>
+    <p style="font-size:13px;color:var(--text2);margin-bottom:1rem">${m.nome} — atual: <strong>${m.estoque} ${m.unidade}</strong></p>
+    <div class="form-row">
+      <div class="form-group"><label>Tipo de ajuste</label><select id="at">
+        <option value="add">Entrada (compra / reposição)</option>
+        <option value="remove">Saída manual</option>
+        <option value="set">Definir quantidade exata</option>
+      </select></div>
+      <div class="form-group"><label>Quantidade</label><input id="aq" type="number" min="0" value="1"></div>
+    </div>
+    <div class="form-group"><label>Observação (opcional)</label><input id="ao" placeholder="Ex: NF 1234, compra fornecedor..."></div>
+    <div class="btn-row">
+      <button class="btn" onclick="closeModal()">Cancelar</button>
+      <button class="btn primary" onclick="confirmarAjuste(${id})">Confirmar</button>
+    </div>`);
+}
+
+function confirmarAjuste(id) {
+  const m = state.materiais.find(x=>x.id===id);
+  const tipo = document.getElementById('at').value;
+  const qtd = parseInt(document.getElementById('aq').value)||0;
+  if(tipo==='add') m.estoque += qtd;
+  else if(tipo==='remove') m.estoque = Math.max(0, m.estoque-qtd);
+  else m.estoque = qtd;
+  save(); closeModal();
+  renderMateriais(document.getElementById('search-mat').value);
+  renderDashboard();
+}
+
+let selectedMats = {};
+function openModalCaso() {
+  selectedMats = {};
+  const matItems = state.materiais.map(m=>`
+    <div class="mat-picker-item">
+      <input type="checkbox" id="chk${m.id}" onchange="toggleMat(${m.id})">
+      <label for="chk${m.id}">${m.nome} <span style="color:var(--text2)">(${m.estoque} disponíveis)</span></label>
+      <input type="number" id="qtd${m.id}" min="1" value="1" style="width:64px;text-align:center" disabled onchange="if(selectedMats[${m.id}]!==undefined)selectedMats[${m.id}]=parseInt(this.value)||1">
+    </div>`).join('');
+  openModal(`
+    <h3>Registrar novo caso</h3>
+    <div class="form-row">
+      <div class="form-group"><label>Paciente</label><input id="cp"></div>
+      <div class="form-group"><label>Data</label><input id="cd" type="date" value="${new Date().toISOString().split('T')[0]}"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Tipo de prótese</label><select id="ct">${TIPOS.map(t=>`<option>${t}</option>`).join('')}</select></div>
+      <div class="form-group"><label>Observações (elementos, etc.)</label><input id="co" placeholder="Ex: Elemento 36, ponte 3 peças..."></div>
+    </div>
+    <div class="form-group">
+      <label>Materiais utilizados</label>
+      <div style="margin-top:8px;border:0.5px solid var(--border);border-radius:var(--radius);padding:0 12px;max-height:220px;overflow-y:auto">${matItems||'<p style="padding:12px;color:var(--text2);font-size:13px">Nenhum material cadastrado.</p>'}</div>
+    </div>
+    <div class="btn-row">
+      <button class="btn" onclick="closeModal()">Cancelar</button>
+      <button class="btn primary" onclick="salvarCaso()">Registrar caso</button>
+    </div>`);
+}
+
+function toggleMat(id) {
+  const chk = document.getElementById('chk'+id);
+  const inp = document.getElementById('qtd'+id);
+  if(chk.checked){ selectedMats[id]=1; inp.disabled=false; }
+  else { delete selectedMats[id]; inp.disabled=true; }
+}
+
+function salvarCaso() {
+  const paciente = document.getElementById('cp').value.trim();
+  const data = document.getElementById('cd').value;
+  if(!paciente||!data){ alert('Preencha paciente e data.'); return; }
+  const itens = Object.keys(selectedMats).map(id=>({ matId:parseInt(id), qtd:parseInt(document.getElementById('qtd'+id).value)||1 }));
+  if(!itens.length){ alert('Selecione ao menos um material.'); return; }
+  for(const it of itens){
+    const m = state.materiais.find(x=>x.id===it.matId);
+    if(m&&m.estoque<it.qtd){ if(!confirm(`Atenção: "${m.nome}" tem apenas ${m.estoque} em estoque, mas você está usando ${it.qtd}. Continuar mesmo assim?`)) return; }
+  }
+  for(const it of itens){ const m=state.materiais.find(x=>x.id===it.matId); if(m) m.estoque=Math.max(0,m.estoque-it.qtd); }
+  state.casos.push({ id:state.nextCasoId++, data, paciente, tipo:document.getElementById('ct').value, itens, obs:document.getElementById('co').value.trim() });
+  save(); closeModal(); renderCasos(); renderDashboard();
+}
+
+function excluirCaso(id) {
+  if(!confirm('Excluir este caso? O estoque não será restaurado automaticamente.')) return;
+  state.casos = state.casos.filter(c=>c.id!==id);
+  save(); renderCasos(); renderDashboard();
+}
+
+function openModal(html) {
+  document.getElementById('modal-content').innerHTML = html;
+  document.getElementById('overlay').classList.add('open');
+}
+function closeModal() { document.getElementById('overlay').classList.remove('open'); }
+
+renderDashboard();
+</script>
+</body>
+</html>
