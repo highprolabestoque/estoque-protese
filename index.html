@@ -39,9 +39,27 @@
 
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 14px; color: var(--text); background: var(--bg3); min-height: 100vh; }
 
-  header { background: var(--bg); border-bottom: 0.5px solid var(--border); padding: 0 1.5rem; display: flex; align-items: center; gap: 12px; height: 56px; position: sticky; top: 0; z-index: 10; }
+  .login-screen { display: none; min-height: 100vh; align-items: center; justify-content: center; padding: 2rem; }
+  body.login-active .login-screen { display: flex; }
+  body.login-active header, body.login-active .layout { display: none; }
+  .login-box { width: min(720px, 100%); }
+  .login-brand { display: flex; align-items: center; gap: 12px; margin-bottom: 1.25rem; }
+  .login-brand-icon { width: 44px; height: 44px; border-radius: 8px; background: var(--bg); border: 0.5px solid var(--border); display: flex; align-items: center; justify-content: center; color: #1D9E75; font-size: 24px; }
+  .login-title h1 { font-size: 20px; font-weight: 600; margin-bottom: 3px; }
+  .login-title span { color: var(--text2); font-size: 13px; }
+  .stock-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  .stock-option { display: flex; align-items: center; gap: 12px; width: 100%; padding: 1rem; border: 0.5px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text); cursor: pointer; text-align: left; font-family: inherit; transition: border-color .15s, background .15s, transform .15s; }
+  .stock-option:hover { border-color: var(--border2); background: var(--bg2); transform: translateY(-1px); }
+  .stock-option i { width: 34px; height: 34px; border-radius: 8px; background: var(--bg2); color: #1D9E75; display: flex; align-items: center; justify-content: center; font-size: 19px; flex-shrink: 0; }
+  .stock-option strong { display: block; font-size: 14px; margin-bottom: 2px; }
+  .stock-option span { color: var(--text2); font-size: 12px; }
+
+  header { background: var(--bg); border-bottom: 0.5px solid var(--border); padding: 0 1.5rem; display: flex; align-items: center; gap: 12px; min-height: 56px; position: sticky; top: 0; z-index: 10; }
   header h1 { font-size: 16px; font-weight: 500; }
   header span { font-size: 12px; color: var(--text2); }
+  .header-text { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; min-width: 0; }
+  .header-spacer { flex: 1; }
+  .switch-stock { flex-shrink: 0; }
 
   .layout { display: flex; min-height: calc(100vh - 56px); }
 
@@ -128,6 +146,12 @@
   .mat-picker-item input[type=number] { width: 60px; text-align: center; flex-shrink: 0; }
 
   @media (max-width: 640px) {
+    .login-screen { padding: 1rem; align-items: flex-start; }
+    .login-box { padding-top: 2rem; }
+    .stock-options { grid-template-columns: 1fr; }
+    header { padding: .75rem 1rem; }
+    .header-text { display: block; }
+    .switch-stock span { display: none; }
     nav { display: none; }
     .form-row, .form-row3 { grid-template-columns: 1fr; }
   }
@@ -135,10 +159,27 @@
 </head>
 <body>
 
+<div class="login-screen" id="login-screen">
+  <div class="login-box">
+    <div class="login-brand">
+      <div class="login-brand-icon"><i class="ti ti-tooth"></i></div>
+      <div class="login-title">
+        <h1>Estoque HighPro</h1>
+        <span>Escolha o local</span>
+      </div>
+    </div>
+    <div class="stock-options" id="stock-options"></div>
+  </div>
+</div>
+
 <header>
   <i class="ti ti-tooth" style="font-size:22px;color:#1D9E75"></i>
-  <h1>Estoque — Laboratório de Prótese</h1>
-  <span id="header-date"></span>
+  <div class="header-text">
+    <h1 id="app-title">Estoque</h1>
+    <span id="header-date"></span>
+  </div>
+  <div class="header-spacer"></div>
+  <button class="btn sm switch-stock" onclick="logout()" title="Trocar estoque"><i class="ti ti-switch-horizontal"></i> <span>Trocar estoque</span></button>
 </header>
 
 <div class="layout">
@@ -247,30 +288,156 @@
 <script>
 const CATS = ['Bloco cerâmica','Bloco zircônia','Bloco PMMA','Disco CAD/CAM','Cimento','Resina','Cerâmica feldspática','Acessório','Outros'];
 const TIPOS = ['Coroa unitária','Pontes','Inlay / Onlay','Faceta','Prótese sobre implante','Prótese parcial removível','Prótese total','Provisório'];
+const STOCKS = [
+  {id:'laboratorio', nome:'Laboratório HighPro', subtitulo:'Laboratório de Prótese', icon:'ti-tooth'},
+  {id:'curso', nome:'Curso HighPro', subtitulo:'Estoque do curso', icon:'ti-school'}
+];
+const LEGACY_STORAGE_KEY = 'estoque_proto_v1';
+const CURRENT_STOCK_KEY = 'estoque_proto_current_stock';
+const STOCK_STORAGE_PREFIX = 'estoque_proto_stock_v1_';
 
-let state = {
-  materiais: [
-    {id:1,nome:'Bloco IPS e.max CAD',ref:'E.MAX-A2-LT',cat:'Bloco cerâmica',estoque:8,minimo:5,fornecedor:'Ivoclar',unidade:'blocos'},
-    {id:2,nome:'Bloco Vita Suprinity',ref:'VITA-SUP-B1',cat:'Bloco cerâmica',estoque:3,minimo:5,fornecedor:'VITA',unidade:'blocos'},
-    {id:3,nome:'Disco Zircônia Katana',ref:'KAT-ZR-D98',cat:'Bloco zircônia',estoque:2,minimo:3,fornecedor:'Kuraray',unidade:'discos'},
-    {id:4,nome:'Bloco PMMA Provisório',ref:'PMMA-A1-14',cat:'Bloco PMMA',estoque:12,minimo:4,fornecedor:'Schütz Dental',unidade:'blocos'},
-    {id:5,nome:'Cimento Multilink N',ref:'MULT-N-CL',cat:'Cimento',estoque:4,minimo:3,fornecedor:'Ivoclar',unidade:'kits'},
-    {id:6,nome:'Bloco IPS Empress CAD',ref:'EMP-A3-C14',cat:'Bloco cerâmica',estoque:0,minimo:4,fornecedor:'Ivoclar',unidade:'blocos'},
-  ],
-  casos: [
-    {id:1,data:'2025-06-10',paciente:'Roberto Alves',tipo:'Coroa unitária',itens:[{matId:1,qtd:1},{matId:5,qtd:1}],obs:'Elemento 36'},
-    {id:2,data:'2025-06-11',paciente:'Ana Ferreira',tipo:'Faceta',itens:[{matId:1,qtd:3}],obs:'Elem. 11,12,13'},
-    {id:3,data:'2025-06-12',paciente:'Carlos Melo',tipo:'Pontes',itens:[{matId:3,qtd:1},{matId:5,qtd:1}],obs:'Ponte 3 elementos'},
-  ],
-  movimentacoes: [],
-  nextMatId:7, nextCasoId:4, nextMovId:1
-};
+let currentStockId = localStorage.getItem(CURRENT_STOCK_KEY) || '';
+let state = createEmptyState();
 
-function save() { try { localStorage.setItem('estoque_proto_v1', JSON.stringify(state)); } catch(e){} }
-function load() { try { const d = localStorage.getItem('estoque_proto_v1'); if(d) state = JSON.parse(d); } catch(e){} }
-load();
+function createLaboratorioState() {
+  return {
+    materiais: [
+      {id:1,nome:'Bloco IPS e.max CAD',ref:'E.MAX-A2-LT',cat:'Bloco cerâmica',estoque:8,minimo:5,fornecedor:'Ivoclar',unidade:'blocos'},
+      {id:2,nome:'Bloco Vita Suprinity',ref:'VITA-SUP-B1',cat:'Bloco cerâmica',estoque:3,minimo:5,fornecedor:'VITA',unidade:'blocos'},
+      {id:3,nome:'Disco Zircônia Katana',ref:'KAT-ZR-D98',cat:'Bloco zircônia',estoque:2,minimo:3,fornecedor:'Kuraray',unidade:'discos'},
+      {id:4,nome:'Bloco PMMA Provisório',ref:'PMMA-A1-14',cat:'Bloco PMMA',estoque:12,minimo:4,fornecedor:'Schütz Dental',unidade:'blocos'},
+      {id:5,nome:'Cimento Multilink N',ref:'MULT-N-CL',cat:'Cimento',estoque:4,minimo:3,fornecedor:'Ivoclar',unidade:'kits'},
+      {id:6,nome:'Bloco IPS Empress CAD',ref:'EMP-A3-C14',cat:'Bloco cerâmica',estoque:0,minimo:4,fornecedor:'Ivoclar',unidade:'blocos'},
+    ],
+    casos: [
+      {id:1,data:'2025-06-10',paciente:'Roberto Alves',tipo:'Coroa unitária',itens:[{matId:1,qtd:1},{matId:5,qtd:1}],obs:'Elemento 36'},
+      {id:2,data:'2025-06-11',paciente:'Ana Ferreira',tipo:'Faceta',itens:[{matId:1,qtd:3}],obs:'Elem. 11,12,13'},
+      {id:3,data:'2025-06-12',paciente:'Carlos Melo',tipo:'Pontes',itens:[{matId:3,qtd:1},{matId:5,qtd:1}],obs:'Ponte 3 elementos'},
+    ],
+    movimentacoes: [],
+    nextMatId:7, nextCasoId:4, nextMovId:1
+  };
+}
+
+function createEmptyState() {
+  return { materiais: [], casos: [], movimentacoes: [], nextMatId:1, nextCasoId:1, nextMovId:1 };
+}
+
+function defaultStateFor(stockId) {
+  return stockId === 'curso' ? createEmptyState() : createLaboratorioState();
+}
+
+function stockKey(stockId) {
+  return STOCK_STORAGE_PREFIX + stockId;
+}
+
+function getStock(stockId=currentStockId) {
+  return STOCKS.find(s=>s.id===stockId) || STOCKS[0];
+}
+
+function normalizeState(data, stockId) {
+  const base = defaultStateFor(stockId);
+  const safe = data && typeof data === 'object' ? data : {};
+  return {
+    materiais: Array.isArray(safe.materiais) ? safe.materiais : base.materiais,
+    casos: Array.isArray(safe.casos) ? safe.casos : base.casos,
+    movimentacoes: Array.isArray(safe.movimentacoes) ? safe.movimentacoes : base.movimentacoes,
+    nextMatId: Number.isFinite(safe.nextMatId) ? safe.nextMatId : base.nextMatId,
+    nextCasoId: Number.isFinite(safe.nextCasoId) ? safe.nextCasoId : base.nextCasoId,
+    nextMovId: Number.isFinite(safe.nextMovId) ? safe.nextMovId : base.nextMovId
+  };
+}
+
+function migrateLegacyStock() {
+  try {
+    const labKey = stockKey('laboratorio');
+    const legacy = localStorage.getItem(LEGACY_STORAGE_KEY);
+    if(legacy && !localStorage.getItem(labKey)) localStorage.setItem(labKey, legacy);
+  } catch(e){}
+}
+
+function save() {
+  if(!currentStockId) return;
+  try { localStorage.setItem(stockKey(currentStockId), JSON.stringify(state)); } catch(e){}
+}
+
+function loadStock(stockId) {
+  migrateLegacyStock();
+  currentStockId = stockId;
+  localStorage.setItem(CURRENT_STOCK_KEY, stockId);
+  try {
+    const stored = localStorage.getItem(stockKey(stockId));
+    state = stored ? normalizeState(JSON.parse(stored), stockId) : defaultStateFor(stockId);
+  } catch(e) {
+    state = defaultStateFor(stockId);
+  }
+  save();
+  updateStockHeader();
+}
 
 document.getElementById('header-date').textContent = new Date().toLocaleDateString('pt-BR', {weekday:'long', day:'numeric', month:'long', year:'numeric'});
+
+function stockSummary(stockId) {
+  try {
+    const stored = localStorage.getItem(stockKey(stockId));
+    const data = stored ? normalizeState(JSON.parse(stored), stockId) : defaultStateFor(stockId);
+    return `${data.materiais.length} materiais &middot; ${data.casos.length} casos`;
+  } catch(e) {
+    return 'Sem dados ainda';
+  }
+}
+
+function renderStockLogin() {
+  migrateLegacyStock();
+  document.body.classList.add('login-active');
+  document.getElementById('stock-options').innerHTML = STOCKS.map(s=>`
+    <button class="stock-option" onclick="selectStock('${s.id}')">
+      <i class="ti ${s.icon}"></i>
+      <div>
+        <strong>${s.nome}</strong>
+        <span>${stockSummary(s.id)}</span>
+      </div>
+    </button>
+  `).join('');
+}
+
+function updateStockHeader() {
+  const stock = getStock();
+  document.getElementById('app-title').textContent = `Estoque — ${stock.nome}`;
+  document.title = `Estoque — ${stock.nome}`;
+}
+
+function selectStock(stockId) {
+  if(!STOCKS.some(s=>s.id===stockId)) return;
+  loadStock(stockId);
+  document.body.classList.remove('login-active');
+  closeModal();
+  const searchMat = document.getElementById('search-mat');
+  const searchCaso = document.getElementById('search-caso');
+  if(searchMat) searchMat.value = '';
+  if(searchCaso) searchCaso.value = '';
+  renderAllViews();
+  showTab('dashboard');
+}
+
+function logout() {
+  save();
+  currentStockId = '';
+  localStorage.removeItem(CURRENT_STOCK_KEY);
+  renderStockLogin();
+}
+
+function initApp() {
+  migrateLegacyStock();
+  if(STOCKS.some(s=>s.id===currentStockId)) {
+    loadStock(currentStockId);
+    document.body.classList.remove('login-active');
+    renderAllViews();
+    showTab('dashboard');
+  } else {
+    renderStockLogin();
+  }
+}
 
 function getStatus(m) { if(m.estoque===0) return 'empty'; if(m.estoque<=m.minimo) return 'low'; return 'ok'; }
 function statusLabel(s) { return s==='ok'?'OK':s==='low'?'Estoque baixo':'Zerado'; }
@@ -283,6 +450,14 @@ function showTab(id) {
   document.getElementById('tab-'+id).classList.add('active');
   const fn = {dashboard:renderDashboard, materiais:renderMateriais, casos:renderCasos, historico:renderHistorico, alertas:renderAlertas};
   if(fn[id]) fn[id]();
+}
+
+function renderAllViews() {
+  renderDashboard();
+  renderMateriais('');
+  renderCasos('');
+  renderHistorico();
+  renderAlertas();
 }
 
 
@@ -570,7 +745,7 @@ function openModal(html) {
 }
 function closeModal() { document.getElementById('overlay').classList.remove('open'); }
 
-renderDashboard();
+initApp();
 </script>
 </body>
 </html>
