@@ -220,9 +220,26 @@
           <input id="auth-password" type="password" autocomplete="current-password" required>
         </div>
         <button class="btn primary" id="auth-submit" type="submit"><i class="ti ti-login"></i> Entrar</button>
+        <button class="btn" id="auth-magic" type="button" onclick="sendMagicLink()"><i class="ti ti-mail"></i> Enviar link por e-mail</button>
+        <button class="btn" id="auth-reset" type="button" onclick="requestPasswordReset()"><i class="ti ti-key"></i> Definir/resetar senha</button>
         <div class="login-message" id="auth-message"></div>
       </form>
-      <div class="login-helper">Use o usuário criado no Supabase. Os dados ficam sincronizados entre computadores depois do login.</div>
+      <div class="login-helper">Se ainda não definiu uma senha, use o link por e-mail. Os dados ficam sincronizados entre computadores depois do login.</div>
+    </div>
+    <div class="login-card hidden" id="reset-panel">
+      <form class="login-form" onsubmit="updatePassword(event)">
+        <div class="form-group" style="margin-bottom:0">
+          <label>Nova senha</label>
+          <input id="new-password" type="password" autocomplete="new-password" minlength="6" required>
+        </div>
+        <div class="form-group" style="margin-bottom:0">
+          <label>Confirmar nova senha</label>
+          <input id="new-password-confirm" type="password" autocomplete="new-password" minlength="6" required>
+        </div>
+        <button class="btn primary" id="password-submit" type="submit"><i class="ti ti-check"></i> Salvar senha</button>
+        <div class="login-message" id="password-message"></div>
+      </form>
+      <div class="login-helper">Depois de salvar, você continuará para a escolha do estoque.</div>
     </div>
     <div id="stock-panel" class="hidden">
       <div class="login-session">
@@ -405,13 +422,41 @@ function setAuthMessage(text='', danger=true) {
   el.style.color = danger ? 'var(--danger-text)' : 'var(--success-text)';
 }
 
+function setPasswordMessage(text='', danger=true) {
+  const el = document.getElementById('password-message');
+  if(!el) return;
+  el.textContent = text;
+  el.style.color = danger ? 'var(--danger-text)' : 'var(--success-text)';
+}
+
+function authRedirectUrl() {
+  return `${window.location.origin}${window.location.pathname}`;
+}
+
+function isPasswordRecoveryRedirect() {
+  const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+  const searchParams = new URLSearchParams(window.location.search);
+  return hashParams.get('type') === 'recovery' || searchParams.get('type') === 'recovery';
+}
+
 function renderAuthLogin(message='') {
   document.body.classList.add('login-active');
   document.getElementById('auth-panel').classList.remove('hidden');
+  document.getElementById('reset-panel').classList.add('hidden');
   document.getElementById('stock-panel').classList.add('hidden');
   document.getElementById('login-subtitle').textContent = 'Entre para sincronizar os dados';
   setAuthMessage(message);
   setSyncStatus('Aguardando login');
+}
+
+function renderPasswordReset(message='') {
+  document.body.classList.add('login-active');
+  document.getElementById('auth-panel').classList.add('hidden');
+  document.getElementById('reset-panel').classList.remove('hidden');
+  document.getElementById('stock-panel').classList.add('hidden');
+  document.getElementById('login-subtitle').textContent = 'Defina sua nova senha';
+  setPasswordMessage(message, !message);
+  setSyncStatus('Definir senha', 'warning');
 }
 
 async function signIn(event) {
@@ -441,6 +486,95 @@ async function signIn(event) {
   } finally {
     submit.disabled = false;
     submit.innerHTML = '<i class="ti ti-login"></i> Entrar';
+  }
+}
+
+async function sendMagicLink() {
+  const client = initSupabaseClient();
+  if(!client) {
+    setAuthMessage('Não foi possível carregar a conexão com o Supabase.');
+    return;
+  }
+  const email = document.getElementById('auth-email').value.trim();
+  const button = document.getElementById('auth-magic');
+  if(!email) {
+    setAuthMessage('Informe o e-mail para receber o link de acesso.');
+    return;
+  }
+  button.disabled = true;
+  button.innerHTML = '<i class="ti ti-loader-2"></i> Enviando...';
+  setAuthMessage('');
+  try {
+    const { error } = await client.auth.signInWithOtp({
+      email,
+      options: { emailRedirectTo: authRedirectUrl() }
+    });
+    if(error) throw error;
+    setAuthMessage('Link enviado. Abra seu e-mail e clique para entrar.', false);
+  } catch(e) {
+    setAuthMessage('Não foi possível enviar o link. Confira o e-mail ou tente novamente em instantes.');
+  } finally {
+    button.disabled = false;
+    button.innerHTML = '<i class="ti ti-mail"></i> Enviar link por e-mail';
+  }
+}
+
+async function requestPasswordReset() {
+  const client = initSupabaseClient();
+  if(!client) {
+    setAuthMessage('Não foi possível carregar a conexão com o Supabase.');
+    return;
+  }
+  const email = document.getElementById('auth-email').value.trim();
+  const button = document.getElementById('auth-reset');
+  if(!email) {
+    setAuthMessage('Informe o e-mail para receber o link de senha.');
+    return;
+  }
+  button.disabled = true;
+  button.innerHTML = '<i class="ti ti-loader-2"></i> Enviando...';
+  setAuthMessage('');
+  try {
+    const { error } = await client.auth.resetPasswordForEmail(email, { redirectTo: authRedirectUrl() });
+    if(error) throw error;
+    setAuthMessage('Link de senha enviado. Abra seu e-mail para definir a nova senha.', false);
+  } catch(e) {
+    setAuthMessage('Não foi possível enviar o link de senha. Confira o e-mail ou tente novamente em instantes.');
+  } finally {
+    button.disabled = false;
+    button.innerHTML = '<i class="ti ti-key"></i> Definir/resetar senha';
+  }
+}
+
+async function updatePassword(event) {
+  if(event) event.preventDefault();
+  const client = initSupabaseClient();
+  const password = document.getElementById('new-password').value;
+  const confirmPassword = document.getElementById('new-password-confirm').value;
+  const button = document.getElementById('password-submit');
+  if(password.length < 6) {
+    setPasswordMessage('Use uma senha com pelo menos 6 caracteres.');
+    return;
+  }
+  if(password !== confirmPassword) {
+    setPasswordMessage('As senhas não conferem.');
+    return;
+  }
+  button.disabled = true;
+  button.innerHTML = '<i class="ti ti-loader-2"></i> Salvando...';
+  setPasswordMessage('');
+  try {
+    const { data, error } = await client.auth.updateUser({ password });
+    if(error) throw error;
+    currentUser = data.user || currentUser;
+    window.history.replaceState({}, document.title, authRedirectUrl());
+    setPasswordMessage('Senha definida com sucesso.', false);
+    await afterAuthReady();
+  } catch(e) {
+    setPasswordMessage('Não foi possível salvar a senha. Abra novamente o link recebido por e-mail.');
+  } finally {
+    button.disabled = false;
+    button.innerHTML = '<i class="ti ti-check"></i> Salvar senha';
   }
 }
 
@@ -757,6 +891,7 @@ function renderStockLogin() {
   migrateLegacyStock();
   document.body.classList.add('login-active');
   document.getElementById('auth-panel').classList.add('hidden');
+  document.getElementById('reset-panel').classList.add('hidden');
   document.getElementById('stock-panel').classList.remove('hidden');
   document.getElementById('login-subtitle').textContent = 'Escolha o local';
   document.getElementById('auth-user-label').textContent = currentUser.email ? `Conectado como ${currentUser.email}` : 'Conectado';
@@ -825,6 +960,10 @@ async function initApp() {
     currentUser = data.session ? data.session.user : null;
   } catch(e) {
     currentUser = null;
+  }
+  if(isPasswordRecoveryRedirect() && currentUser) {
+    renderPasswordReset();
+    return;
   }
   if(!currentUser) {
     renderAuthLogin();
@@ -1531,16 +1670,19 @@ Object.assign(window, {
   openModalTrabalhos,
   previewMaterialPhoto,
   removeMaterialPhoto,
+  requestPasswordReset,
   renderCasos,
   renderTrabalhosModal,
   renderMateriais,
   salvarCaso,
   salvarMaterial,
   selectStock,
+  sendMagicLink,
   signIn,
   signOut,
   showTab,
-  toggleMat
+  toggleMat,
+  updatePassword
 });
 
 initApp();
