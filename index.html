@@ -268,6 +268,7 @@
         <h2>Casos</h2>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
           <input type="text" placeholder="Buscar..." style="width:200px" oninput="renderCasos(this.value)" id="search-caso">
+          <button class="btn" type="button" data-action="manage-work-types"><i class="ti ti-plus"></i> Registrar trabalhos</button>
           <button class="btn primary" onclick="openModalCaso()"><i class="ti ti-plus"></i> Registrar caso</button>
         </div>
       </div>
@@ -319,6 +320,7 @@
 <script>
 const DEFAULT_CATEGORIES = ['Bloco cerâmica','Bloco zircônia','Bloco PMMA','Disco CAD/CAM','Cimento','Resina','Cerâmica feldspática','Acessório','Outros'];
 const TIPOS = ['Coroa unitária','Pontes','Inlay / Onlay','Faceta','Prótese sobre implante','Prótese parcial removível','Prótese total','Provisório'];
+const DEFAULT_WORK_TYPES = [...TIPOS];
 const VALIDADES = [
   {value:'curta', label:'Curta'},
   {value:'media', label:'Média'},
@@ -354,12 +356,13 @@ function createLaboratorioState() {
     ],
     movimentacoes: [],
     categorias: [...DEFAULT_CATEGORIES],
+    trabalhos: [...DEFAULT_WORK_TYPES],
     nextMatId:7, nextCasoId:4, nextMovId:1
   };
 }
 
 function createEmptyState() {
-  return { materiais: [], casos: [], movimentacoes: [], categorias: [...DEFAULT_CATEGORIES], nextMatId:1, nextCasoId:1, nextMovId:1 };
+  return { materiais: [], casos: [], movimentacoes: [], categorias: [...DEFAULT_CATEGORIES], trabalhos: [...DEFAULT_WORK_TYPES], nextMatId:1, nextCasoId:1, nextMovId:1 };
 }
 
 function defaultStateFor(stockId) {
@@ -408,6 +411,36 @@ function categoryExists(name, ignoreIndex=-1) {
   return getCategories().some((cat, index)=>index!==ignoreIndex && cat.toLowerCase()===key);
 }
 
+function cleanWorkTypeName(value) {
+  return String(value || '').trim().replace(/\s+/g, ' ');
+}
+
+function normalizeWorkTypes(list, casos=[]) {
+  const source = Array.isArray(list) && list.length ? list : DEFAULT_WORK_TYPES;
+  const names = [...source, ...casos.map(c=>c&&c.tipo).filter(Boolean)];
+  const seen = new Set();
+  const result = [];
+  names.forEach(name => {
+    const cleaned = cleanWorkTypeName(name);
+    const key = cleaned.toLowerCase();
+    if(cleaned && !seen.has(key)) {
+      seen.add(key);
+      result.push(cleaned);
+    }
+  });
+  return result.length ? result : ['Outro'];
+}
+
+function getWorkTypes() {
+  state.trabalhos = normalizeWorkTypes(state.trabalhos, state.casos);
+  return state.trabalhos;
+}
+
+function workTypeExists(name, ignoreIndex=-1) {
+  const key = cleanWorkTypeName(name).toLowerCase();
+  return getWorkTypes().some((type, index)=>index!==ignoreIndex && type.toLowerCase()===key);
+}
+
 function normalizeMoneyValue(value) {
   if(value === undefined || value === null || value === '') return '';
   let raw = String(value).trim();
@@ -433,11 +466,13 @@ function normalizeState(data, stockId) {
   const base = defaultStateFor(stockId);
   const safe = data && typeof data === 'object' ? data : {};
   const materiais = (Array.isArray(safe.materiais) ? safe.materiais : base.materiais).map(normalizeMaterial);
+  const casos = Array.isArray(safe.casos) ? safe.casos : base.casos;
   return {
     materiais,
-    casos: Array.isArray(safe.casos) ? safe.casos : base.casos,
+    casos,
     movimentacoes: Array.isArray(safe.movimentacoes) ? safe.movimentacoes : base.movimentacoes,
     categorias: normalizeCategories(safe.categorias || base.categorias, materiais),
+    trabalhos: normalizeWorkTypes(safe.trabalhos || base.trabalhos, casos),
     nextMatId: Number.isFinite(safe.nextMatId) ? safe.nextMatId : base.nextMatId,
     nextCasoId: Number.isFinite(safe.nextCasoId) ? safe.nextCasoId : base.nextCasoId,
     nextMovId: Number.isFinite(safe.nextMovId) ? safe.nextMovId : base.nextMovId
@@ -765,7 +800,7 @@ function renderMateriais(filtro='') {
 
 function renderCasos(filtro='') {
   const q = (filtro||'').toLowerCase();
-  const lista = [...state.casos].filter(c=>!q||c.paciente.toLowerCase().includes(q)||c.tipo.toLowerCase().includes(q)).reverse();
+  const lista = [...state.casos].filter(c=>!q||String(c.paciente||'').toLowerCase().includes(q)||String(c.tipo||'').toLowerCase().includes(q)).reverse();
   document.getElementById('tabela-casos').innerHTML = lista.length===0
     ? '<tr><td colspan="6" class="empty-state">Nenhum caso registrado.</td></tr>'
     : lista.map(c=>{
@@ -773,8 +808,8 @@ function renderCasos(filtro='') {
         const chips = c.itens.map(it=>{ const m=state.materiais.find(x=>x.id===it.matId); return m?`<span class="chip">${it.qtd}× ${m.nome}</span>`:''; }).join('');
         return `<tr>
           <td style="white-space:nowrap;font-size:12px">${c.data}</td>
-          <td><strong>${c.paciente}</strong>${c.obs?`<br><span style="font-size:11px;color:var(--text2)">${c.obs}</span>`:''}</td>
-          <td><span class="chip">${c.tipo}</span></td>
+          <td><strong>${escapeHtml(c.paciente)}</strong>${c.obs?`<br><span style="font-size:11px;color:var(--text2)">${escapeHtml(c.obs)}</span>`:''}</td>
+          <td><span class="chip">${escapeHtml(c.tipo||'—')}</span></td>
           <td>${chips||'—'}</td>
           <td style="text-align:center"><strong>${qtdTotal}</strong></td>
           <td><button class="btn sm danger-btn" onclick="excluirCaso(${c.id})"><i class="ti ti-trash"></i></button></td>
@@ -921,8 +956,9 @@ function excluirCategoria(index) {
   const usados = state.materiais.filter(m=>m.cat===cat).length;
   const restantes = categorias.filter((_, i)=>i!==index);
   let fallback = restantes.find(c=>c.toLowerCase()==='outros') || restantes[0] || 'Outros';
+  const destino = usados===1 ? 'será movido' : 'serão movidos';
   const msg = usados
-    ? `Excluir "${cat}"? ${usados} material${usados===1?'':'s'} será${usados===1?'':'o'} movido${usados===1?'':'s'} para "${fallback}".`
+    ? `Excluir "${cat}"? ${usados} material${usados===1?'':'s'} ${destino} para "${fallback}".`
     : `Excluir "${cat}"?`;
   if(!confirm(msg)) return;
   state.categorias = restantes.length ? restantes : [fallback];
@@ -930,6 +966,89 @@ function excluirCategoria(index) {
   state.materiais.forEach(m=>{ if(m.cat===cat) m.cat = fallback; });
   save();
   renderCategoriasModal();
+  renderAllViews();
+}
+
+function openModalTrabalhos() {
+  openModal(`
+    <h3>Trabalhos protéticos</h3>
+    <div class="category-add-row">
+      <div class="form-group" style="margin-bottom:0">
+        <label>Novo tipo de trabalho</label>
+        <input id="worktype-new" placeholder="Ex: Protocolo, Coroa sobre implante..." onkeydown="if(event.key==='Enter')adicionarTrabalho()">
+      </div>
+      <button class="btn primary" onclick="adicionarTrabalho()"><i class="ti ti-plus"></i> Adicionar</button>
+    </div>
+    <div id="worktype-list" class="category-list"></div>
+    <div class="btn-row">
+      <button class="btn" onclick="closeModal()">Fechar</button>
+    </div>
+  `);
+  renderTrabalhosModal();
+}
+
+function renderTrabalhosModal() {
+  const list = document.getElementById('worktype-list');
+  if(!list) return;
+  const trabalhos = getWorkTypes();
+  list.innerHTML = trabalhos.map((trabalho, index)=>{
+    const used = state.casos.filter(c=>c.tipo===trabalho).length;
+    return `<div class="category-row">
+      <div class="category-name">
+        <strong>${escapeHtml(trabalho)}</strong>
+        <span>${used} caso${used===1?'':'s'}</span>
+      </div>
+      <div class="category-actions">
+        <button class="btn sm" onclick="editarTrabalho(${index})"><i class="ti ti-edit"></i></button>
+        <button class="btn sm danger-btn" onclick="excluirTrabalho(${index})"><i class="ti ti-trash"></i></button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function adicionarTrabalho() {
+  const input = document.getElementById('worktype-new');
+  const nome = cleanWorkTypeName(input ? input.value : '');
+  if(!nome){ alert('Informe o nome do trabalho.'); return; }
+  if(workTypeExists(nome)){ alert('Esse trabalho já existe.'); return; }
+  state.trabalhos.push(nome);
+  save();
+  if(input) input.value = '';
+  renderTrabalhosModal();
+  renderAllViews();
+}
+
+function editarTrabalho(index) {
+  const trabalhos = getWorkTypes();
+  const atual = trabalhos[index];
+  if(!atual) return;
+  const novo = cleanWorkTypeName(prompt('Novo nome do trabalho:', atual));
+  if(!novo) return;
+  if(workTypeExists(novo, index)){ alert('Esse trabalho já existe.'); return; }
+  state.trabalhos[index] = novo;
+  state.casos.forEach(c=>{ if(c.tipo===atual) c.tipo = novo; });
+  save();
+  renderTrabalhosModal();
+  renderAllViews();
+}
+
+function excluirTrabalho(index) {
+  const trabalhos = getWorkTypes();
+  const trabalho = trabalhos[index];
+  if(!trabalho) return;
+  if(trabalhos.length===1){ alert('Mantenha pelo menos um trabalho.'); return; }
+  const usados = state.casos.filter(c=>c.tipo===trabalho).length;
+  const restantes = trabalhos.filter((_, i)=>i!==index);
+  const fallback = restantes[0] || 'Outro';
+  const destino = usados===1 ? 'será movido' : 'serão movidos';
+  const msg = usados
+    ? `Excluir "${trabalho}"? ${usados} caso${usados===1?'':'s'} ${destino} para "${fallback}".`
+    : `Excluir "${trabalho}"?`;
+  if(!confirm(msg)) return;
+  state.trabalhos = restantes.length ? restantes : [fallback];
+  state.casos.forEach(c=>{ if(c.tipo===trabalho) c.tipo = fallback; });
+  save();
+  renderTrabalhosModal();
   renderAllViews();
 }
 
@@ -1036,6 +1155,7 @@ function confirmarAjuste(id) {
 let selectedMats = {};
 function openModalCaso() {
   selectedMats = {};
+  const trabalhos = getWorkTypes();
   const matItems = state.materiais.map(m=>`
     <div class="mat-picker-item">
       <input type="checkbox" id="chk${m.id}" onchange="toggleMat(${m.id})">
@@ -1049,7 +1169,7 @@ function openModalCaso() {
       <div class="form-group"><label>Data</label><input id="cd" type="date" value="${new Date().toISOString().split('T')[0]}"></div>
     </div>
     <div class="form-row">
-      <div class="form-group"><label>Tipo de prótese</label><select id="ct">${TIPOS.map(t=>`<option>${t}</option>`).join('')}</select></div>
+      <div class="form-group"><label>Tipo de trabalho</label><select id="ct">${trabalhos.map(t=>`<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('')}</select></div>
       <div class="form-group"><label>Observações (elementos, etc.)</label><input id="co" placeholder="Ex: Elemento 36, ponte 3 peças..."></div>
     </div>
     <div class="form-group">
@@ -1072,7 +1192,9 @@ function toggleMat(id) {
 function salvarCaso() {
   const paciente = document.getElementById('cp').value.trim();
   const data = document.getElementById('cd').value;
+  const tipo = cleanWorkTypeName(document.getElementById('ct').value);
   if(!paciente||!data){ alert('Preencha paciente e data.'); return; }
+  if(!tipo){ alert('Selecione o tipo de trabalho.'); return; }
   const itens = Object.keys(selectedMats).map(id=>({ matId:parseInt(id), qtd:parseInt(document.getElementById('qtd'+id).value)||1 }));
   if(!itens.length){ alert('Selecione ao menos um material.'); return; }
   for(const it of itens){
@@ -1081,7 +1203,7 @@ function salvarCaso() {
   }
   const novoCasoId = state.nextCasoId++;
   for(const it of itens){ const m=state.materiais.find(x=>x.id===it.matId); if(m){ const antes=m.estoque; m.estoque=Math.max(0,m.estoque-it.qtd); addMov('caso',it.matId,it.qtd,antes,m.estoque,'',novoCasoId); } }
-  state.casos.push({ id:novoCasoId, data, paciente, tipo:document.getElementById('ct').value, itens, obs:document.getElementById('co').value.trim() });
+  state.casos.push({ id:novoCasoId, data, paciente, tipo, itens, obs:document.getElementById('co').value.trim() });
   save(); closeModal(); renderCasos(); renderDashboard();
 }
 
@@ -1112,6 +1234,9 @@ document.addEventListener('click', (event) => {
   } else if(actionEl.dataset.action === 'manage-categories') {
     event.preventDefault();
     openModalCategorias();
+  } else if(actionEl.dataset.action === 'manage-work-types') {
+    event.preventDefault();
+    openModalTrabalhos();
   } else if(actionEl.dataset.action === 'edit-material') {
     event.preventDefault();
     editarMat(id);
@@ -1123,23 +1248,28 @@ document.addEventListener('click', (event) => {
 
 Object.assign(window, {
   adicionarCategoria,
+  adicionarTrabalho,
   ajustarEstoque,
   atualizarMinimo,
   closeModal,
   confirmarAjuste,
   editarCategoria,
   editarMat,
+  editarTrabalho,
   excluirCategoria,
   excluirCaso,
   excluirMat,
+  excluirTrabalho,
   logout,
   openFotoMaterial,
   openModalCategorias,
   openModalCaso,
   openModalMaterial,
+  openModalTrabalhos,
   previewMaterialPhoto,
   removeMaterialPhoto,
   renderCasos,
+  renderTrabalhosModal,
   renderMateriais,
   salvarCaso,
   salvarMaterial,
