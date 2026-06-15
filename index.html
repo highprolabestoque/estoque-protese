@@ -80,6 +80,7 @@
   .card { background: var(--bg2); border-radius: var(--radius); padding: 1rem; }
   .card-label { font-size: 11px; color: var(--text2); margin-bottom: 4px; text-transform: uppercase; letter-spacing: .04em; }
   .card-value { font-size: 28px; font-weight: 500; line-height: 1; }
+  .card-value.money { font-size: 22px; line-height: 1.12; }
   .card-value.danger { color: var(--danger-text); }
   .card-value.warning { color: var(--warn-text); }
   .card-value.success { color: var(--success-text); }
@@ -409,7 +410,11 @@ function categoryExists(name, ignoreIndex=-1) {
 
 function normalizeMoneyValue(value) {
   if(value === undefined || value === null || value === '') return '';
-  const parsed = Number(value);
+  let raw = String(value).trim();
+  if(!raw) return '';
+  raw = raw.replace(/[^\d,.-]/g, '');
+  if(raw.includes(',')) raw = raw.replace(/\./g, '').replace(',', '.');
+  const parsed = Number(raw);
   return Number.isFinite(parsed) ? parsed : '';
 }
 
@@ -536,6 +541,44 @@ function formatMoney(value) {
   const parsed = normalizeMoneyValue(value);
   return parsed === '' ? '—' : parsed.toLocaleString('pt-BR', {style:'currency', currency:'BRL'});
 }
+function formatMoneyInput(value) {
+  const parsed = normalizeMoneyValue(value);
+  return parsed === '' ? '' : formatMoney(parsed);
+}
+function materialUnitCost(m) {
+  const parsed = normalizeMoneyValue(m&&m.custoUn);
+  return parsed === '' ? 0 : parsed;
+}
+function inventoryValue() {
+  return state.materiais.reduce((total, m)=>total + ((parseInt(m.estoque)||0) * materialUnitCost(m)), 0);
+}
+function movementUnitCost(mv) {
+  const stored = normalizeMoneyValue(mv&&mv.custoUn);
+  if(stored !== '') return stored;
+  const material = state.materiais.find(m=>m.id===(mv&&mv.matId));
+  return materialUnitCost(material);
+}
+function movementValue(mv) {
+  if(!mv) return 0;
+  const stored = normalizeMoneyValue(mv.valor);
+  if(stored !== '') return stored;
+  const delta = (parseInt(mv.estoqueDepois)||0) - (parseInt(mv.estoqueAntes)||0);
+  return Math.abs(delta) * movementUnitCost(mv);
+}
+function currentMonthKey() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+}
+function monthlyMovementTotals(monthKey=currentMonthKey()) {
+  return (state.movimentacoes||[]).reduce((totals, mv)=>{
+    if(!mv.data || !String(mv.data).startsWith(monthKey)) return totals;
+    const delta = (parseInt(mv.estoqueDepois)||0) - (parseInt(mv.estoqueAntes)||0);
+    const value = movementValue(mv);
+    if(delta > 0) totals.entradas += value;
+    else if(delta < 0) totals.saidas += value;
+    return totals;
+  }, {entradas:0, saidas:0});
+}
 function validadeLabel(value) {
   const opt = VALIDADES.find(v=>v.value===value);
   return opt ? opt.label : 'Não informada';
@@ -646,6 +689,8 @@ function renderAllViews() {
 
 function addMov(tipo, matId, qtd, estoqueAntes, estoqueDepois, obs='', casoId=null) {
   const m = state.materiais.find(x=>x.id===matId);
+  const custoUn = materialUnitCost(m);
+  const delta = estoqueDepois - estoqueAntes;
   state.movimentacoes.push({
     id: state.nextMovId++,
     data: new Date().toISOString().split('T')[0],
@@ -657,6 +702,8 @@ function addMov(tipo, matId, qtd, estoqueAntes, estoqueDepois, obs='', casoId=nu
     qtd,
     estoqueAntes,
     estoqueDepois,
+    custoUn,
+    valor: Math.abs(delta) * custoUn,
     obs,
     casoId
   });
@@ -666,9 +713,14 @@ function renderDashboard() {
   const total = state.materiais.reduce((a,m)=>a+m.estoque,0);
   const baixos = state.materiais.filter(m=>getStatus(m)==='low').length;
   const zerados = state.materiais.filter(m=>getStatus(m)==='empty').length;
+  const valorEstoque = inventoryValue();
+  const mes = monthlyMovementTotals();
   document.getElementById('stat-cards').innerHTML = `
     <div class="card"><div class="card-label">Materiais cadastrados</div><div class="card-value">${state.materiais.length}</div></div>
     <div class="card"><div class="card-label">Unidades em estoque</div><div class="card-value">${total}</div></div>
+    <div class="card"><div class="card-label">Valor total em estoque</div><div class="card-value money success">${formatMoney(valorEstoque)}</div></div>
+    <div class="card"><div class="card-label">Entradas do mês</div><div class="card-value money success">${formatMoney(mes.entradas)}</div></div>
+    <div class="card"><div class="card-label">Saídas do mês</div><div class="card-value money danger">${formatMoney(mes.saidas)}</div></div>
     <div class="card"><div class="card-label">Estoque baixo</div><div class="card-value warning">${baixos}</div></div>
     <div class="card"><div class="card-label">Zerados</div><div class="card-value danger">${zerados}</div></div>
     <div class="card"><div class="card-label">Casos registrados</div><div class="card-value">${state.casos.length}</div></div>
@@ -743,6 +795,7 @@ function renderHistorico() {
         const label = tipoLabel[mv.tipo]||mv.tipo;
         const delta = mv.estoqueDepois - mv.estoqueAntes;
         const sinal = delta > 0 ? '+' : '';
+        const valor = movementValue(mv);
         return `<div class="uso-item">
           <div style="width:32px;height:32px;border-radius:50%;background:var(--${cor}-bg);display:flex;align-items:center;justify-content:center;flex-shrink:0">
             <i class="ti ${icon}" style="font-size:16px;color:var(--${cor}-text)"></i>
@@ -758,6 +811,7 @@ function renderHistorico() {
               <div style="text-align:right;white-space:nowrap;flex-shrink:0">
                 <span style="font-size:13px;font-weight:500;color:var(--${cor}-text)">${sinal}${delta}</span>
                 <br><span style="font-size:11px;color:var(--text2)">${mv.estoqueAntes} → ${mv.estoqueDepois}</span>
+                <br><span style="font-size:11px;color:var(--text2)">${formatMoney(valor)}</span>
                 <br><span style="font-size:11px;color:var(--text3)">${mv.data} ${mv.hora||''}</span>
               </div>
             </div>
@@ -892,8 +946,8 @@ function openModalMaterial(m=null) {
     <div class="form-row"><div class="form-group"><label>Categoria</label><select id="mc">${categorias.map(c=>`<option value="${escapeHtml(c)}"${selectedCategory===c?' selected':''}>${escapeHtml(c)}</option>`).join('')}</select></div><div class="form-group"><label>Unidade (blocos, kits...)</label><input id="mu" value="${m?m.unidade:'blocos'}"></div></div>
     <div class="form-row"><div class="form-group"><label>Qtd. em estoque</label><input id="me" type="number" min="0" value="${m?m.estoque:0}"></div><div class="form-group"><label>Estoque mínimo (alerta)</label><input id="mm" type="number" min="0" value="${m?m.minimo:3}"></div></div>
     <div class="form-row3">
-      <div class="form-group"><label>Custo Un.</label><input id="mcu" type="number" min="0" step="0.01" value="${custoUnValue}" placeholder="0,00"></div>
-      <div class="form-group"><label>Custo Cx.</label><input id="mcx" type="number" min="0" step="0.01" value="${custoCxValue}" placeholder="0,00"></div>
+      <div class="form-group"><label>Custo Un.</label><input id="mcu" type="text" inputmode="decimal" value="${formatMoneyInput(custoUnValue)}" placeholder="R$ 0,00"></div>
+      <div class="form-group"><label>Custo Cx.</label><input id="mcx" type="text" inputmode="decimal" value="${formatMoneyInput(custoCxValue)}" placeholder="R$ 0,00"></div>
       <div class="form-group"><label>Validade</label><select id="mv"><option value="">Não informada</option>${VALIDADES.map(v=>`<option value="${v.value}"${m&&m.validade===v.value?' selected':''}>${v.label}</option>`).join('')}</select></div>
     </div>
     <div class="form-group"><label>Fornecedor</label><input id="mf" value="${m?m.fornecedor:''}"></div>
