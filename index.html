@@ -115,7 +115,7 @@
   .empty-state { text-align: center; padding: 2rem; color: var(--text2); font-size: 13px; }
   .empty-state i { font-size: 28px; display: block; margin-bottom: 8px; opacity: .5; }
 
-  .overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 100; align-items: center; justify-content: center; padding: 1rem; }
+  .overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 100; align-items: center; justify-content: center; padding: 1rem; cursor: default; }
   .overlay.open { display: flex; }
   .modal { background: var(--bg); border-radius: var(--radius-lg); border: 0.5px solid var(--border); padding: 1.5rem; width: min(540px, 100%); max-height: 90vh; overflow-y: auto; }
   .modal h3 { font-size: 15px; font-weight: 500; margin-bottom: 1.25rem; }
@@ -240,7 +240,7 @@
 </div>
 
 <!-- OVERLAY MODAL -->
-<div class="overlay" id="overlay" onclick="if(event.target===this)closeModal()">
+<div class="overlay" id="overlay">
   <div class="modal" id="modal-content"></div>
 </div>
 
@@ -262,7 +262,8 @@ let state = {
     {id:2,data:'2025-06-11',paciente:'Ana Ferreira',tipo:'Faceta',itens:[{matId:1,qtd:3}],obs:'Elem. 11,12,13'},
     {id:3,data:'2025-06-12',paciente:'Carlos Melo',tipo:'Pontes',itens:[{matId:3,qtd:1},{matId:5,qtd:1}],obs:'Ponte 3 elementos'},
   ],
-  nextMatId:7, nextCasoId:4
+  movimentacoes: [],
+  nextMatId:7, nextCasoId:4, nextMovId:1
 };
 
 function save() { try { localStorage.setItem('estoque_proto_v1', JSON.stringify(state)); } catch(e){} }
@@ -282,6 +283,25 @@ function showTab(id) {
   document.getElementById('tab-'+id).classList.add('active');
   const fn = {dashboard:renderDashboard, materiais:renderMateriais, casos:renderCasos, historico:renderHistorico, alertas:renderAlertas};
   if(fn[id]) fn[id]();
+}
+
+
+function addMov(tipo, matId, qtd, estoqueAntes, estoqueDepois, obs='', casoId=null) {
+  const m = state.materiais.find(x=>x.id===matId);
+  state.movimentacoes.push({
+    id: state.nextMovId++,
+    data: new Date().toISOString().split('T')[0],
+    hora: new Date().toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit'}),
+    tipo,
+    matId,
+    matNome: m ? m.nome : '?',
+    matRef: m ? m.ref : '?',
+    qtd,
+    estoqueAntes,
+    estoqueDepois,
+    obs,
+    casoId
+  });
 }
 
 function renderDashboard() {
@@ -352,16 +372,38 @@ function renderCasos(filtro='') {
 }
 
 function renderHistorico() {
-  const todos = [...state.casos].reverse();
-  document.getElementById('historico-lista').innerHTML = todos.length===0
-    ? '<div class="empty-state"><i class="ti ti-history"></i>Sem movimentações registradas.</div>'
-    : todos.map(c=>{
-        const itensStr = c.itens.map(it=>{ const m=state.materiais.find(x=>x.id===it.matId); return m?`<strong>${it.qtd}× ${m.nome}</strong> (${m.ref})`:''; }).filter(Boolean).join(' · ');
-        return `<div class="uso-item"><div class="uso-dot"></div><div style="flex:1">
-          <div style="display:flex;justify-content:space-between;gap:8px"><strong>${c.paciente}</strong><span style="font-size:12px;color:var(--text2);white-space:nowrap">${c.data}</span></div>
-          <div style="margin:3px 0"><span class="chip">${c.tipo}</span>${c.obs?` <span style="font-size:12px;color:var(--text2)">${c.obs}</span>`:''}</div>
-          <div style="font-size:12px;color:var(--text2);margin-top:2px">${itensStr||'—'}</div>
-        </div></div>`;
+  const movs = [...(state.movimentacoes||[])].reverse();
+  const tipoLabel = {add:'Entrada',remove:'Saída manual',set:'Ajuste manual',caso:'Uso em caso'};
+  const tipoColor = {add:'success',remove:'danger',set:'warning',caso:'info'};
+  const tipoIcon = {add:'ti-arrow-down-circle',remove:'ti-arrow-up-circle',set:'ti-adjustments',caso:'ti-tooth'};
+  document.getElementById('historico-lista').innerHTML = movs.length===0
+    ? '<div class="empty-state"><i class="ti ti-history"></i>Nenhuma movimentação registrada ainda.<br><span style="font-size:12px">As movimentações aparecem aqui quando você ajusta estoque ou registra casos.</span></div>'
+    : movs.map(mv=>{
+        const cor = tipoColor[mv.tipo]||'info';
+        const icon = tipoIcon[mv.tipo]||'ti-activity';
+        const label = tipoLabel[mv.tipo]||mv.tipo;
+        const delta = mv.estoqueDepois - mv.estoqueAntes;
+        const sinal = delta > 0 ? '+' : '';
+        return `<div class="uso-item">
+          <div style="width:32px;height:32px;border-radius:50%;background:var(--${cor}-bg);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+            <i class="ti ${icon}" style="font-size:16px;color:var(--${cor}-text)"></i>
+          </div>
+          <div style="flex:1">
+            <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start">
+              <div>
+                <strong>${mv.matNome}</strong> <span style="font-size:11px;color:var(--text2)">${mv.matRef}</span><br>
+                <span class="badge ${cor}" style="margin-top:3px">${label}</span>
+                ${mv.obs?`<span style="font-size:12px;color:var(--text2);margin-left:6px">${mv.obs}</span>`:''}
+                ${mv.casoId?`<span style="font-size:12px;color:var(--info-text);margin-left:6px">Caso #${mv.casoId}</span>`:''}
+              </div>
+              <div style="text-align:right;white-space:nowrap;flex-shrink:0">
+                <span style="font-size:13px;font-weight:500;color:var(--${cor}-text)">${sinal}${delta}</span>
+                <br><span style="font-size:11px;color:var(--text2)">${mv.estoqueAntes} → ${mv.estoqueDepois}</span>
+                <br><span style="font-size:11px;color:var(--text3)">${mv.data} ${mv.hora||''}</span>
+              </div>
+            </div>
+          </div>
+        </div>`;
       }).join('');
 }
 
@@ -453,9 +495,12 @@ function confirmarAjuste(id) {
   const m = state.materiais.find(x=>x.id===id);
   const tipo = document.getElementById('at').value;
   const qtd = parseInt(document.getElementById('aq').value)||0;
+  const obs = document.getElementById('ao').value.trim();
+  const antes = m.estoque;
   if(tipo==='add') m.estoque += qtd;
   else if(tipo==='remove') m.estoque = Math.max(0, m.estoque-qtd);
   else m.estoque = qtd;
+  addMov(tipo, id, qtd, antes, m.estoque, obs);
   save(); closeModal();
   renderMateriais(document.getElementById('search-mat').value);
   renderDashboard();
@@ -507,8 +552,9 @@ function salvarCaso() {
     const m = state.materiais.find(x=>x.id===it.matId);
     if(m&&m.estoque<it.qtd){ if(!confirm(`Atenção: "${m.nome}" tem apenas ${m.estoque} em estoque, mas você está usando ${it.qtd}. Continuar mesmo assim?`)) return; }
   }
-  for(const it of itens){ const m=state.materiais.find(x=>x.id===it.matId); if(m) m.estoque=Math.max(0,m.estoque-it.qtd); }
-  state.casos.push({ id:state.nextCasoId++, data, paciente, tipo:document.getElementById('ct').value, itens, obs:document.getElementById('co').value.trim() });
+  const novoCasoId = state.nextCasoId++;
+  for(const it of itens){ const m=state.materiais.find(x=>x.id===it.matId); if(m){ const antes=m.estoque; m.estoque=Math.max(0,m.estoque-it.qtd); addMov('caso',it.matId,it.qtd,antes,m.estoque,'',novoCasoId); } }
+  state.casos.push({ id:novoCasoId, data, paciente, tipo:document.getElementById('ct').value, itens, obs:document.getElementById('co').value.trim() });
   save(); closeModal(); renderCasos(); renderDashboard();
 }
 
