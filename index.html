@@ -126,7 +126,7 @@
   .photo-preview { min-height: 118px; border: 0.5px dashed var(--border2); border-radius: var(--radius); background: var(--bg2); display: flex; align-items: center; justify-content: center; overflow: hidden; color: var(--text2); font-size: 12px; }
   .photo-preview img { width: 100%; max-height: 180px; object-fit: contain; display: block; }
   .photo-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 8px; }
-  .photo-actions input[type=file] { font-size: 12px; max-width: 100%; }
+  .photo-file-input { display: none; }
   .photo-viewer { display: grid; gap: 14px; }
   .photo-viewer-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
   .photo-viewer-head h3 { margin: 0; }
@@ -184,7 +184,7 @@
   .mat-picker-item input[type=checkbox] { width: auto; flex-shrink: 0; cursor: pointer; }
   .mat-picker-item input[type=number] { width: 60px; text-align: center; flex-shrink: 0; }
 
-  @media (max-width: 640px) {
+  @media (max-width: 760px) {
     .login-screen { padding: 1rem; align-items: flex-start; }
     .login-box { padding-top: 2rem; }
     .stock-options { grid-template-columns: 1fr; }
@@ -193,7 +193,41 @@
     .switch-stock span { display: none; }
     .category-add-row { grid-template-columns: 1fr; }
     .category-row { align-items: flex-start; }
-    nav { display: none; }
+    .layout { display: block; min-height: calc(100vh - 56px); }
+    main { max-width: none; padding: 1rem; padding-bottom: calc(84px + env(safe-area-inset-bottom)); }
+    nav {
+      display: flex;
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      top: auto;
+      z-index: 50;
+      width: 100%;
+      height: auto;
+      padding: 6px 4px calc(6px + env(safe-area-inset-bottom));
+      border-right: 0;
+      border-top: 0.5px solid var(--border);
+      overflow-x: auto;
+      overflow-y: hidden;
+      background: var(--bg);
+    }
+    nav button {
+      flex: 1 0 64px;
+      min-width: 64px;
+      justify-content: center;
+      flex-direction: column;
+      gap: 3px;
+      padding: 8px 6px;
+      font-size: 11px;
+      white-space: nowrap;
+      border-right: 0;
+    }
+    nav button.active { border-right: 0; border-top: 2px solid var(--text); }
+    nav button i { font-size: 18px; }
+    .page-header { align-items: stretch; }
+    .page-header > div { width: 100%; }
+    .page-header input[type=text] { flex: 1 1 160px; min-width: 0; }
     .form-row, .form-row3 { grid-template-columns: 1fr; }
   }
 </style>
@@ -1056,8 +1090,10 @@ function renderPhotoPreview() {
 
 function removeMaterialPhoto() {
   materialPhotoDraft = '';
-  const input = document.getElementById('mp');
-  if(input) input.value = '';
+  ['mp','mp-camera'].forEach(id => {
+    const input = document.getElementById(id);
+    if(input) input.value = '';
+  });
   renderPhotoPreview();
 }
 
@@ -1498,8 +1534,11 @@ function openModalMaterial(m=null) {
       <label>Foto do material</label>
       <div class="photo-preview" id="photo-preview"></div>
       <div class="photo-actions">
-        <input id="mp" type="file" accept="image/*" onchange="previewMaterialPhoto(this)">
-        <button class="btn sm" onclick="removeMaterialPhoto()"><i class="ti ti-photo-x"></i> Remover foto</button>
+        <input id="mp" class="photo-file-input" type="file" accept="image/*" onchange="previewMaterialPhoto(this)">
+        <input id="mp-camera" class="photo-file-input" type="file" accept="image/*" capture="environment" onchange="previewMaterialPhoto(this)">
+        <button class="btn sm" type="button" onclick="document.getElementById('mp').click()"><i class="ti ti-photo"></i> Galeria</button>
+        <button class="btn sm" type="button" onclick="document.getElementById('mp-camera').click()"><i class="ti ti-camera"></i> Câmera</button>
+        <button class="btn sm" type="button" onclick="removeMaterialPhoto()"><i class="ti ti-photo-x"></i> Remover foto</button>
       </div>
     </div>
     <div class="btn-row">
