@@ -389,6 +389,7 @@ const STOCK_STORAGE_PREFIX = 'estoque_proto_stock_v1_';
 const SUPABASE_URL = 'https://rllegqqcpnirqnvtrtuo.supabase.co';
 const SUPABASE_PUBLIC_KEY = 'sb_publishable_1432XAlIimMJekQP-PSiLw_apYBY00y';
 const CLOUD_TABLE = 'stock_data';
+const PUBLIC_APP_URL = 'https://highprolabestoque.github.io/estoque-protese/';
 
 let currentStockId = localStorage.getItem(CURRENT_STOCK_KEY) || '';
 let state = createEmptyState();
@@ -430,7 +431,13 @@ function setPasswordMessage(text='', danger=true) {
 }
 
 function authRedirectUrl() {
-  return `${window.location.origin}${window.location.pathname}`;
+  return PUBLIC_APP_URL;
+}
+
+function friendlyAuthError(error, fallback) {
+  const message = String(error && error.message ? error.message : '').trim();
+  if(!message) return fallback;
+  return `${fallback} Detalhe: ${message}`;
 }
 
 function isPasswordRecoveryRedirect() {
@@ -482,7 +489,7 @@ async function signIn(event) {
     currentUser = data.user;
     await afterAuthReady();
   } catch(e) {
-    setAuthMessage('Não foi possível entrar. Confira e-mail e senha.');
+    setAuthMessage(friendlyAuthError(e, 'Não foi possível entrar.'));
   } finally {
     submit.disabled = false;
     submit.innerHTML = '<i class="ti ti-login"></i> Entrar';
@@ -512,7 +519,7 @@ async function sendMagicLink() {
     if(error) throw error;
     setAuthMessage('Link enviado. Abra seu e-mail e clique para entrar.', false);
   } catch(e) {
-    setAuthMessage('Não foi possível enviar o link. Confira o e-mail ou tente novamente em instantes.');
+    setAuthMessage(friendlyAuthError(e, 'Não foi possível enviar o link.'));
   } finally {
     button.disabled = false;
     button.innerHTML = '<i class="ti ti-mail"></i> Enviar link por e-mail';
@@ -539,7 +546,7 @@ async function requestPasswordReset() {
     if(error) throw error;
     setAuthMessage('Link de senha enviado. Abra seu e-mail para definir a nova senha.', false);
   } catch(e) {
-    setAuthMessage('Não foi possível enviar o link de senha. Confira o e-mail ou tente novamente em instantes.');
+    setAuthMessage(friendlyAuthError(e, 'Não foi possível enviar o link de senha.'));
   } finally {
     button.disabled = false;
     button.innerHTML = '<i class="ti ti-key"></i> Definir/resetar senha';
@@ -571,7 +578,7 @@ async function updatePassword(event) {
     setPasswordMessage('Senha definida com sucesso.', false);
     await afterAuthReady();
   } catch(e) {
-    setPasswordMessage('Não foi possível salvar a senha. Abra novamente o link recebido por e-mail.');
+    setPasswordMessage(friendlyAuthError(e, 'Não foi possível salvar a senha. Abra novamente o link recebido por e-mail.'));
   } finally {
     button.disabled = false;
     button.innerHTML = '<i class="ti ti-check"></i> Salvar senha';
