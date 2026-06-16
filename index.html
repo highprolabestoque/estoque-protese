@@ -1238,6 +1238,7 @@ function renderMateriais(filtro='') {
         <td style="font-size:12px;color:var(--text2)">${m.fornecedor||'—'}</td>
         <td><span class="badge ${getStatus(m)}">${statusLabel(getStatus(m))}</span></td>
         <td style="white-space:nowrap">
+          <button class="btn sm" type="button" data-action="duplicate-material" data-id="${m.id}" title="Duplicar material"><i class="ti ti-copy"></i></button>
           <button class="btn sm" type="button" data-action="edit-material" data-id="${m.id}"><i class="ti ti-edit"></i></button>
           <button class="btn sm" onclick="ajustarEstoque(${m.id})" style="margin-left:4px"><i class="ti ti-arrows-exchange"></i> Ajustar</button>
           <button class="btn sm danger-btn" onclick="excluirMat(${m.id})" style="margin-left:4px"><i class="ti ti-trash"></i></button>
@@ -1469,7 +1470,7 @@ function excluirTrabalho(index) {
 }
 
 function openModalMaterial(m=null) {
-  const editing = !!m;
+  const editing = !!(m&&m.id);
   materialPhotoDraft = m&&m.foto ? m.foto : '';
   const custoUnValue = m ? normalizeMoneyValue(m.custoUn) : '';
   const custoCxValue = m ? normalizeMoneyValue(m.custoCx) : '';
@@ -1496,12 +1497,23 @@ function openModalMaterial(m=null) {
     </div>
     <div class="btn-row">
       <button class="btn" onclick="closeModal()">Cancelar</button>
-      <button class="btn primary" onclick="salvarMaterial(${m?m.id:0})">${editing?'Salvar alterações':'Adicionar material'}</button>
+      <button class="btn primary" onclick="salvarMaterial(${editing?m.id:0})">${editing?'Salvar alterações':'Adicionar material'}</button>
     </div>`);
   renderPhotoPreview();
 }
 
 function editarMat(id) { openModalMaterial(state.materiais.find(m=>m.id===id)); }
+
+function duplicarMat(id) {
+  const original = state.materiais.find(m=>m.id===id);
+  if(!original) return;
+  openModalMaterial({
+    ...original,
+    id: 0,
+    nome: `${original.nome} (cópia)`,
+    ref: `${original.ref}-COPY`
+  });
+}
 
 function excluirMat(id) {
   if(!confirm('Excluir este material? Ele não poderá ser recuperado.')) return;
@@ -1666,6 +1678,9 @@ document.addEventListener('click', (event) => {
   } else if(actionEl.dataset.action === 'edit-material') {
     event.preventDefault();
     editarMat(id);
+  } else if(actionEl.dataset.action === 'duplicate-material') {
+    event.preventDefault();
+    duplicarMat(id);
   } else if(actionEl.dataset.action === 'photo-material') {
     event.preventDefault();
     openFotoMaterial(id);
@@ -1681,6 +1696,7 @@ Object.assign(window, {
   confirmarAjuste,
   editarCategoria,
   editarMat,
+  duplicarMat,
   editarTrabalho,
   excluirCategoria,
   excluirCaso,
