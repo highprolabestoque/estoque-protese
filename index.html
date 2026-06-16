@@ -1177,13 +1177,51 @@ function renderDashboard() {
         <div><strong>${m.nome}</strong> (${m.ref}) — ${m.estoque} ${m.unidade} em estoque · mínimo: ${m.minimo}</div>
       </div>`).join('');
 
-  const movs = [...state.casos].reverse().slice(0,5);
+  const movs = [...(state.movimentacoes||[])].reverse().slice(0,5);
   document.getElementById('ultimas-mov').innerHTML = movs.length===0
-    ? '<div class="empty-state"><i class="ti ti-clipboard-list"></i>Nenhum caso registrado ainda.</div>'
-    : movs.map(c => {
-        const matNames = c.itens.map(it=>{ const m=state.materiais.find(x=>x.id===it.matId); return m?`${it.qtd}× ${m.nome}`:''; }).filter(Boolean).join(', ');
-        return `<div class="uso-item"><div class="uso-dot"></div><div><strong>${c.paciente}</strong> — ${c.tipo}<br><span style="color:var(--text2);font-size:12px">${c.data} · ${matNames||'—'}${c.obs?' · '+c.obs:''}</span></div></div>`;
-      }).join('');
+    ? '<div class="empty-state"><i class="ti ti-history"></i>Nenhuma movimentação registrada ainda.</div>'
+    : movs.map(renderMovementItem).join('');
+}
+
+function movementDisplay(mv) {
+  const tipoLabel = {add:'Entrada',remove:'Saída manual',set:'Ajuste manual',caso:'Uso em caso'};
+  const tipoColor = {add:'success',remove:'danger',set:'warning',caso:'info'};
+  const tipoIcon = {add:'ti-arrow-down-circle',remove:'ti-arrow-up-circle',set:'ti-adjustments',caso:'ti-tooth'};
+  return {
+    label: tipoLabel[mv.tipo]||mv.tipo||'Movimentação',
+    cor: tipoColor[mv.tipo]||'info',
+    icon: tipoIcon[mv.tipo]||'ti-activity'
+  };
+}
+
+function renderMovementItem(mv) {
+  const meta = movementDisplay(mv);
+  const antes = parseInt(mv.estoqueAntes)||0;
+  const depois = parseInt(mv.estoqueDepois)||0;
+  const delta = depois - antes;
+  const sinal = delta > 0 ? '+' : '';
+  const valor = movementValue(mv);
+  return `<div class="uso-item">
+    <div style="width:32px;height:32px;border-radius:50%;background:var(--${meta.cor}-bg);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+      <i class="ti ${meta.icon}" style="font-size:16px;color:var(--${meta.cor}-text)"></i>
+    </div>
+    <div style="flex:1">
+      <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start">
+        <div>
+          <strong>${escapeHtml(mv.matNome||'?')}</strong> <span style="font-size:11px;color:var(--text2)">${escapeHtml(mv.matRef||'')}</span><br>
+          <span class="badge ${meta.cor}" style="margin-top:3px">${escapeHtml(meta.label)}</span>
+          ${mv.obs?`<span style="font-size:12px;color:var(--text2);margin-left:6px">${escapeHtml(mv.obs)}</span>`:''}
+          ${mv.casoId?`<span style="font-size:12px;color:var(--info-text);margin-left:6px">Caso #${mv.casoId}</span>`:''}
+        </div>
+        <div style="text-align:right;white-space:nowrap;flex-shrink:0">
+          <span style="font-size:13px;font-weight:500;color:var(--${meta.cor}-text)">${sinal}${delta}</span>
+          <br><span style="font-size:11px;color:var(--text2)">${antes} → ${depois}</span>
+          <br><span style="font-size:11px;color:var(--text2)">${formatMoney(valor)}</span>
+          <br><span style="font-size:11px;color:var(--text3)">${escapeHtml(mv.data||'')} ${escapeHtml(mv.hora||'')}</span>
+        </div>
+      </div>
+    </div>
+  </div>`;
 }
 
 function renderMateriais(filtro='') {
@@ -1228,40 +1266,9 @@ function renderCasos(filtro='') {
 
 function renderHistorico() {
   const movs = [...(state.movimentacoes||[])].reverse();
-  const tipoLabel = {add:'Entrada',remove:'Saída manual',set:'Ajuste manual',caso:'Uso em caso'};
-  const tipoColor = {add:'success',remove:'danger',set:'warning',caso:'info'};
-  const tipoIcon = {add:'ti-arrow-down-circle',remove:'ti-arrow-up-circle',set:'ti-adjustments',caso:'ti-tooth'};
   document.getElementById('historico-lista').innerHTML = movs.length===0
     ? '<div class="empty-state"><i class="ti ti-history"></i>Nenhuma movimentação registrada ainda.<br><span style="font-size:12px">As movimentações aparecem aqui quando você ajusta estoque ou registra casos.</span></div>'
-    : movs.map(mv=>{
-        const cor = tipoColor[mv.tipo]||'info';
-        const icon = tipoIcon[mv.tipo]||'ti-activity';
-        const label = tipoLabel[mv.tipo]||mv.tipo;
-        const delta = mv.estoqueDepois - mv.estoqueAntes;
-        const sinal = delta > 0 ? '+' : '';
-        const valor = movementValue(mv);
-        return `<div class="uso-item">
-          <div style="width:32px;height:32px;border-radius:50%;background:var(--${cor}-bg);display:flex;align-items:center;justify-content:center;flex-shrink:0">
-            <i class="ti ${icon}" style="font-size:16px;color:var(--${cor}-text)"></i>
-          </div>
-          <div style="flex:1">
-            <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start">
-              <div>
-                <strong>${mv.matNome}</strong> <span style="font-size:11px;color:var(--text2)">${mv.matRef}</span><br>
-                <span class="badge ${cor}" style="margin-top:3px">${label}</span>
-                ${mv.obs?`<span style="font-size:12px;color:var(--text2);margin-left:6px">${mv.obs}</span>`:''}
-                ${mv.casoId?`<span style="font-size:12px;color:var(--info-text);margin-left:6px">Caso #${mv.casoId}</span>`:''}
-              </div>
-              <div style="text-align:right;white-space:nowrap;flex-shrink:0">
-                <span style="font-size:13px;font-weight:500;color:var(--${cor}-text)">${sinal}${delta}</span>
-                <br><span style="font-size:11px;color:var(--text2)">${mv.estoqueAntes} → ${mv.estoqueDepois}</span>
-                <br><span style="font-size:11px;color:var(--text2)">${formatMoney(valor)}</span>
-                <br><span style="font-size:11px;color:var(--text3)">${mv.data} ${mv.hora||''}</span>
-              </div>
-            </div>
-          </div>
-        </div>`;
-      }).join('');
+    : movs.map(renderMovementItem).join('');
 }
 
 function renderAlertas() {
@@ -1519,11 +1526,21 @@ function salvarMaterial(id) {
     foto: materialPhotoDraft,
     fornecedor: document.getElementById('mf').value.trim()
   };
-  if(id){ Object.assign(state.materiais.find(m=>m.id===id), data); }
-  else { data.id = state.nextMatId++; state.materiais.push(data); }
+  if(id){
+    const material = state.materiais.find(m=>m.id===id);
+    const antes = material ? material.estoque : 0;
+    Object.assign(material, data);
+    if(material && antes !== material.estoque) addMov('set', id, material.estoque, antes, material.estoque, 'Edição do material');
+  }
+  else {
+    data.id = state.nextMatId++;
+    state.materiais.push(data);
+    if(data.estoque > 0) addMov('add', data.id, data.estoque, 0, data.estoque, 'Estoque inicial');
+  }
   save(); closeModal();
   renderMateriais(document.getElementById('search-mat').value);
   renderDashboard();
+  renderHistorico();
 }
 
 function ajustarEstoque(id) {
