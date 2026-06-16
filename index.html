@@ -993,14 +993,20 @@ function materialUnitCost(m) {
   const parsed = normalizeMoneyValue(m&&m.custoUn);
   return parsed === '' ? 0 : parsed;
 }
+function materialStockCost(m) {
+  const custoUn = normalizeMoneyValue(m&&m.custoUn);
+  if(custoUn !== '') return custoUn;
+  const custoCx = normalizeMoneyValue(m&&m.custoCx);
+  return custoCx === '' ? 0 : custoCx;
+}
 function inventoryValue() {
-  return state.materiais.reduce((total, m)=>total + ((parseInt(m.estoque)||0) * materialUnitCost(m)), 0);
+  return state.materiais.reduce((total, m)=>total + ((parseInt(m.estoque)||0) * materialStockCost(m)), 0);
 }
 function movementUnitCost(mv) {
   const stored = normalizeMoneyValue(mv&&mv.custoUn);
   if(stored !== '') return stored;
   const material = state.materiais.find(m=>m.id===(mv&&mv.matId));
-  return materialUnitCost(material);
+  return materialStockCost(material);
 }
 function movementValue(mv) {
   if(!mv) return 0;
@@ -1133,7 +1139,7 @@ function renderAllViews() {
 
 function addMov(tipo, matId, qtd, estoqueAntes, estoqueDepois, obs='', casoId=null) {
   const m = state.materiais.find(x=>x.id===matId);
-  const custoUn = materialUnitCost(m);
+  const custoUn = materialStockCost(m);
   const delta = estoqueDepois - estoqueAntes;
   state.movimentacoes.push({
     id: state.nextMovId++,
@@ -1472,8 +1478,9 @@ function excluirTrabalho(index) {
 function openModalMaterial(m=null) {
   const editing = !!(m&&m.id);
   materialPhotoDraft = m&&m.foto ? m.foto : '';
-  const custoUnValue = m ? normalizeMoneyValue(m.custoUn) : '';
-  const custoCxValue = m ? normalizeMoneyValue(m.custoCx) : '';
+  let custoUnValue = m ? normalizeMoneyValue(m.custoUn) : '';
+  let custoCxValue = m ? normalizeMoneyValue(m.custoCx) : '';
+  if(custoUnValue !== '') custoCxValue = '';
   const categorias = getCategories();
   const selectedCategory = m&&m.cat ? m.cat : categorias[0];
   openModal(`
@@ -1482,8 +1489,8 @@ function openModalMaterial(m=null) {
     <div class="form-row"><div class="form-group"><label>Categoria</label><select id="mc">${categorias.map(c=>`<option value="${escapeHtml(c)}"${selectedCategory===c?' selected':''}>${escapeHtml(c)}</option>`).join('')}</select></div><div class="form-group"><label>Unidade (blocos, kits...)</label><input id="mu" value="${m?m.unidade:'blocos'}"></div></div>
     <div class="form-row"><div class="form-group"><label>Qtd. em estoque</label><input id="me" type="number" min="0" value="${m?m.estoque:0}"></div><div class="form-group"><label>Estoque mínimo (alerta)</label><input id="mm" type="number" min="0" value="${m?m.minimo:3}"></div></div>
     <div class="form-row3">
-      <div class="form-group"><label>Custo Un.</label><input id="mcu" type="text" inputmode="decimal" value="${formatMoneyInput(custoUnValue)}" placeholder="R$ 0,00"></div>
-      <div class="form-group"><label>Custo Cx.</label><input id="mcx" type="text" inputmode="decimal" value="${formatMoneyInput(custoCxValue)}" placeholder="R$ 0,00"></div>
+      <div class="form-group"><label>Custo Un.</label><input id="mcu" type="text" inputmode="decimal" value="${formatMoneyInput(custoUnValue)}" placeholder="R$ 0,00" oninput="clearOtherCost('un')"></div>
+      <div class="form-group"><label>Custo Cx.</label><input id="mcx" type="text" inputmode="decimal" value="${formatMoneyInput(custoCxValue)}" placeholder="R$ 0,00" oninput="clearOtherCost('cx')"></div>
       <div class="form-group"><label>Validade</label><select id="mv"><option value="">Não informada</option>${VALIDADES.map(v=>`<option value="${v.value}"${m&&m.validade===v.value?' selected':''}>${v.label}</option>`).join('')}</select></div>
     </div>
     <div class="form-group"><label>Fornecedor</label><input id="mf" value="${m?m.fornecedor:''}"></div>
@@ -1515,6 +1522,13 @@ function duplicarMat(id) {
   });
 }
 
+function clearOtherCost(kind) {
+  const custoUn = document.getElementById('mcu');
+  const custoCx = document.getElementById('mcx');
+  if(kind==='un' && custoUn && custoUn.value.trim() && custoCx) custoCx.value = '';
+  if(kind==='cx' && custoCx && custoCx.value.trim() && custoUn) custoUn.value = '';
+}
+
 function excluirMat(id) {
   if(!confirm('Excluir este material? Ele não poderá ser recuperado.')) return;
   state.materiais = state.materiais.filter(m=>m.id!==id);
@@ -1525,6 +1539,12 @@ function salvarMaterial(id) {
   const nome = document.getElementById('mn').value.trim();
   const ref = document.getElementById('mr').value.trim();
   if(!nome||!ref){ alert('Preencha nome e referência.'); return; }
+  const custoUn = normalizeMoneyValue(document.getElementById('mcu').value);
+  const custoCx = normalizeMoneyValue(document.getElementById('mcx').value);
+  if(custoUn !== '' && custoCx !== '') {
+    alert('Preencha apenas Custo Un. ou Custo Cx., não os dois.');
+    return;
+  }
   const data = {
     nome,
     ref,
@@ -1532,8 +1552,8 @@ function salvarMaterial(id) {
     unidade: document.getElementById('mu').value||'blocos',
     estoque: parseInt(document.getElementById('me').value)||0,
     minimo: parseInt(document.getElementById('mm').value)||0,
-    custoUn: normalizeMoneyValue(document.getElementById('mcu').value),
-    custoCx: normalizeMoneyValue(document.getElementById('mcx').value),
+    custoUn,
+    custoCx,
     validade: document.getElementById('mv').value,
     foto: materialPhotoDraft,
     fornecedor: document.getElementById('mf').value.trim()
@@ -1692,6 +1712,7 @@ Object.assign(window, {
   adicionarTrabalho,
   ajustarEstoque,
   atualizarMinimo,
+  clearOtherCost,
   closeModal,
   confirmarAjuste,
   editarCategoria,
